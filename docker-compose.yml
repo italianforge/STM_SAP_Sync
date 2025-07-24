@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  sap-sync-dev:
+    build: .
+    environment:
+      - ENV=development
+    volumes:
+      - .:/app
+    profiles:
+      - dev
+
+  sap-sync-test:
+    build: .
+    environment:
+      - ENV=test
+    profiles:
+      - test
+
+  sap-sync-prod:
+    build: .
+    environment:
+      - ENV=production
+    profiles:
+      - prod
