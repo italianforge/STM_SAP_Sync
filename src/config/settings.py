@@ -6,7 +6,7 @@ class Settings:
     """Configurazioni generali dell'applicazione"""
     
     # Configurazioni sincronizzazione
-    DEFAULT_BATCH_SIZE = 1000
+    DEFAULT_BATCH_SIZE = 5000
     MAX_RETRIES = 3
     RETRY_DELAY_SECONDS = 5
     

@@ -38,6 +38,15 @@ def safe_float(value: Any) -> Optional[float]:
     except:
         return None
 
+def safe_int(value: Any) -> Optional[int]:
+    """Converte safely an integer, handling None and empty strings"""
+    if value is None or value == '':
+        return None
+    try:
+        return int(value)
+    except:
+        return None
+
 def safe_string(value: Any) -> Optional[str]:
     """Converte safely a string, handling None"""
     return str(value) if value is not None else None

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime
+from sqlalchemy import Column, Float, String, DateTime
 from .base import Base
 
 class SAP_AnagraficheArticoli(Base):
@@ -7,8 +7,19 @@ class SAP_AnagraficheArticoli(Base):
 
     id = Column(String, primary_key=True)
     description = Column(String)
-    famiglia_tornitura = Column(String)
-    min_level = Column(DateTime)
+    caratt_destination = Column(String)
+    critico = Column(String)
+    ubicazione = Column(String)
+    macchina_applicazione = Column(String)
+    stato = Column(String)
+    costruttore = Column(String)
+    fornitore = Column(String)
+    tipo_articolo = Column(String)
+    auto_ingranaggi = Column(String)
+    note_acquisti = Column(String)
+    scorta_minima = Column(Float)
+    qty_riordino = Column(Float)
+    cod_business_partner_pref = Column(String)
     last_synced_at = Column(DateTime)
     
     def __repr__(self):
