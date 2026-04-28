@@ -3,7 +3,8 @@ from .base import Base
 
 class SAP_OrdiniAcquistoLine(Base):
     """Modello per le righe degli ordini di acquisto SAP"""
-    __tablename__ = "SAP_ordini_acquisto_lines"
+    __tablename__ = "ordini_acquisto_lines"
+    __table_args__ = {"schema": "sap"}
 
     id = Column(Integer, primary_key=True)
     cod_documento = Column(Integer, primary_key=True)

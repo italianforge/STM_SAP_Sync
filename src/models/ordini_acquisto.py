@@ -3,7 +3,8 @@ from .base import Base
 
 class SAP_OrdiniAcquisto(Base):
     """Modello per ordini di acquisto SAP"""
-    __tablename__ = "SAP_ordini_acquisto"
+    __tablename__ = "ordini_acquisto"
+    __table_args__ = {"schema": "sap"}
 
     id = Column(Integer, primary_key=True)
     code = Column(Integer)
