@@ -3,7 +3,8 @@ from .base import Base
 
 class SAP_AnagraficheArticoli(Base):
     """Modello per anagrafica articoli SAP"""
-    __tablename__ = "SAP_anagrafica_articoli"
+    __tablename__ = "anagrafica_articoli"
+    __table_args__ = {"schema": "sap"}
 
     id = Column(String, primary_key=True)
     description = Column(String)

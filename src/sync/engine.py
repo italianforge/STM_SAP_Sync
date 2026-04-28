@@ -101,12 +101,20 @@ class SyncEngine:
     
     def _truncate_table(self, session, mapping, logger):
         """Svuota completamente una tabella PostgreSQL"""
+        schema = getattr(mapping.pg_model, '__table_args__', {}) 
+        if isinstance(schema, dict):
+            schema_name = schema.get('schema', 'public')
+        elif isinstance(schema, tuple):
+            schema_name = next((d.get('schema', 'public') for d in schema if isinstance(d, dict)), 'public')
+        else:
+            schema_name = 'public'
         table_name = mapping.pg_model.__tablename__
+        full_table_name = f'{schema_name}.{table_name}'
         truncate_start = time.time()
         
         try:
-            logger.info(f"Svuotamento tabella {table_name}...")
-            session.execute(text(f'TRUNCATE TABLE "{table_name}" RESTART IDENTITY CASCADE'))
+            logger.info(f"Svuotamento tabella {full_table_name}...")
+            session.execute(text(f'TRUNCATE TABLE {full_table_name} RESTART IDENTITY CASCADE'))
             session.flush()
             
             truncate_duration = time.time() - truncate_start
@@ -157,18 +165,21 @@ class SyncEngine:
                 # Quando il batch è pieno, esegui l'operazione
                 if len(batch_records) >= self.batch_size:
                     batch_start = time.time()
-                    
-                    if mapping.requires_truncate():
-                        self._execute_insert_batch(pg_session, mapping, batch_records)
-                        operation_name = "Batch insert"
-                    else:
-                        self._execute_upsert_batch(pg_session, mapping, batch_records)
-                        operation_name = "Batch upsert"
-                    
-                    batch_duration = time.time() - batch_start
-                    processed += len(batch_records)
-                    log_performance(logger, operation_name, batch_duration, len(batch_records))
-                    logger.info(f"Processate {processed}/{len(rows)} righe...")
+                    operation_name = "Batch insert" if mapping.requires_truncate() else "Batch upsert"
+                    try:
+                        if mapping.requires_truncate():
+                            self._execute_insert_batch(pg_session, mapping, batch_records)
+                        else:
+                            self._execute_upsert_batch(pg_session, mapping, batch_records)
+                        
+                        batch_duration = time.time() - batch_start
+                        processed += len(batch_records)
+                        log_performance(logger, operation_name, batch_duration, len(batch_records))
+                        logger.info(f"Processate {processed}/{len(rows)} righe...")
+                    except Exception as batch_e:
+                        error_count += len(batch_records)
+                        pg_session.rollback()
+                        log_database_error(logger, f"Batch alla riga {row_num}", batch_e)
                     batch_records = []
                     
             except Exception as e:
@@ -178,15 +189,14 @@ class SyncEngine:
 
         # Processa l'ultimo batch se ci sono record rimanenti
         if batch_records:
+            operation_name = "Final batch insert" if mapping.requires_truncate() else "Final batch upsert"
             try:
                 batch_start = time.time()
                 
                 if mapping.requires_truncate():
                     self._execute_insert_batch(pg_session, mapping, batch_records)
-                    operation_name = "Final batch insert"
                 else:
                     self._execute_upsert_batch(pg_session, mapping, batch_records)
-                    operation_name = "Final batch upsert"
                 
                 batch_duration = time.time() - batch_start
                 processed += len(batch_records)
@@ -202,7 +212,7 @@ class SyncEngine:
         if not records:
             return
         
-        stmt = insert(mapping.pg_model).values(records)
+        stmt = insert(mapping.pg_model).values(records).on_conflict_do_nothing()
         session.execute(stmt)
         session.flush()  # Libera la memoria senza fare commit
     

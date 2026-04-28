@@ -3,7 +3,8 @@ from .base import Base
 
 class SAP_CatalogoBusinessPartner(Base):
     """Modello per catalogo business partner SAP"""
-    __tablename__ = "SAP_catalogo_business_partner"
+    __tablename__ = "catalogo_business_partner"
+    __table_args__ = (dict(schema="sap"),)
 
     cod_articolo = Column(String, primary_key=True)
     cod_business_partner = Column(String, primary_key=True)
