@@ -29,6 +29,32 @@ def safe_datetime(value: Any) -> Optional[datetime]:
     
     return None
 
+def safe_date(value: Any) -> Optional[date]:
+    """Converte safely a date, handling None and SAP timestamps"""
+    if value is None or value == '':
+        return None
+
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+
+    if isinstance(value, datetime):
+        return value.date()
+
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except:
+            return None
+
+    if isinstance(value, (int, float)):
+        try:
+            if value > 0:
+                return (datetime(1899, 12, 30) + timedelta(days=int(value))).date()
+        except:
+            return None
+
+    return None
+
 def safe_float(value: Any) -> Optional[float]:
     """Converte safely a float, handling None and empty strings"""
     if value is None or value == '':

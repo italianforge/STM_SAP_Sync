@@ -21,6 +21,8 @@ class SAP_AnagraficheArticoli(Base):
     scorta_minima = Column(Float)
     qty_riordino = Column(Float)
     cod_business_partner_pref = Column(String)
+    cod_ricambio = Column(String)   # OSCN.Substitute
+    cod_fornitore = Column(String)  # OSCN.CardCode
     last_synced_at = Column(DateTime)
     
     def __repr__(self):

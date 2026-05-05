@@ -13,12 +13,18 @@ class TableMapping:
     def __init__(self, sap_table: str, pg_model, column_mappings: Dict[str, str], 
                  transformations: Optional[Dict[str, Callable]] = None,
                  primary_key_sap: Union[str, List[str]] = "ItemCode",
-                 sync_strategy: SyncStrategy = SyncStrategy.UPSERT):
+                 sync_strategy: SyncStrategy = SyncStrategy.UPSERT,
+                 sap_query: Optional[str] = None,
+                 sap_timestamp_prefix: Optional[str] = None):
         self.sap_table = sap_table
         self.pg_model = pg_model
         self.column_mappings = column_mappings  # sap_column -> pg_column
         self.transformations = transformations or {}
         self.sync_strategy = sync_strategy
+        # Query SQL custom (per JOIN multi-tabella). Se None, la query viene costruita automaticamente.
+        self.sap_query = sap_query
+        # Prefisso alias tabella per le colonne timestamp (UpdateDate, UpdateTS) nella query custom.
+        self.sap_timestamp_prefix = sap_timestamp_prefix
         # Normalizza primary_key_sap come lista
         if isinstance(primary_key_sap, str):
             self.primary_key_sap = [primary_key_sap]

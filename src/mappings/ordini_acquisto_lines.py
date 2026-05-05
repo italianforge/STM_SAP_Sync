@@ -1,6 +1,6 @@
 from ..models.ordini_acquisto_lines import SAP_OrdiniAcquistoLine
 from .base import SyncStrategy, TableMapping
-from ..utils.transformers import safe_float, safe_string
+from ..utils.transformers import safe_date, safe_float, safe_string
 
 
 MAPPING_ORDINI_ACQUISTO_LINES = TableMapping(
@@ -11,10 +11,12 @@ MAPPING_ORDINI_ACQUISTO_LINES = TableMapping(
         "DocEntry": "cod_documento",
         "ItemCode": "cod_articolo",
         "Quantity": "quantity",
+        "ShipDate": "data_consegna",
     },
     transformations={
         "cod_articolo": safe_string,
         "quantity": safe_float,
+        "data_consegna": safe_date,
     },
     primary_key_sap=["LineNum", "DocEntry"],  # Chiave primaria multipla
     sync_strategy=SyncStrategy.TRUNCATE_INSERT  # Usa truncate e insert
