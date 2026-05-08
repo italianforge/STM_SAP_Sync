@@ -3,6 +3,20 @@ from .base import SyncStrategy, TableMapping
 from ..utils.transformers import safe_string, safe_int, safe_datetime
 
 
+_ORDINI_ACQUISTO_QUERY = """
+SELECT
+    DocEntry,
+    DocNum,
+    DocDate,
+    DocDueDate,
+    CardCode,
+    UpdateDate,
+    UpdateTS
+FROM dbo.OPOR
+WHERE DocDate >= DATEADD(year, -1, GETDATE())
+""".strip()
+
+
 MAPPING_ORDINI_ACQUISTO = TableMapping(
     sap_table="dbo.OPOR",
     pg_model=SAP_OrdiniAcquisto,  
@@ -21,7 +35,8 @@ MAPPING_ORDINI_ACQUISTO = TableMapping(
         "doc_due_date": safe_datetime,
         "cod_business_partner": safe_string
     },
-    primary_key_sap=["DocEntry"],  # Chiave primaria multipla
-    sync_strategy=SyncStrategy.UPSERT  # Usa truncate e insert
+    primary_key_sap=["DocEntry"],
+    sync_strategy=SyncStrategy.UPSERT,
+    sap_query=_ORDINI_ACQUISTO_QUERY,
 )
 

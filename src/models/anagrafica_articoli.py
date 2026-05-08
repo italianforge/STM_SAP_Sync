@@ -11,7 +11,6 @@ class SAP_AnagraficheArticoli(Base):
     caratt_destination = Column(String)
     critico = Column(String)
     ubicazione = Column(String)
-    macchina_applicazione = Column(String)
     stato = Column(String)
     costruttore = Column(String)
     fornitore = Column(String)
@@ -21,8 +20,7 @@ class SAP_AnagraficheArticoli(Base):
     scorta_minima = Column(Float)
     qty_riordino = Column(Float)
     cod_business_partner_pref = Column(String)
-    cod_ricambio = Column(String)   # OSCN.Substitute
-    cod_fornitore = Column(String)  # OSCN.CardCode
+    priorita = Column(String)
     last_synced_at = Column(DateTime)
     
     def __repr__(self):

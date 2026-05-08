@@ -71,6 +71,12 @@ class SyncEngine:
                 rows, mapping, pg_session, table_logger
             )
 
+            # Esegui post-sync callback se definito
+            if mapping.post_sync_callback:
+                table_logger.info("Esecuzione post_sync_callback...")
+                mapping.post_sync_callback(pg_session, rows)
+                table_logger.info("post_sync_callback completato")
+
             # Aggiorna stato sincronizzazione solo se non è truncate_insert
             if max_ts and not mapping.requires_truncate():
                 self.sync_state_service.update_last_sync(pg_session, table_name, max_ts)
@@ -135,10 +141,11 @@ class SyncEngine:
                 prefix = f"{mapping.sap_timestamp_prefix}." if mapping.sap_timestamp_prefix else ""
                 last_sync_date = last_sync.strftime("%Y%m%d")
                 last_sync_ts = last_sync.hour * 10000 + last_sync.minute * 100 + last_sync.second
+                connector = "AND" if "WHERE" in query.upper() else "WHERE"
                 query += (
-                    f" WHERE CONVERT(date, {prefix}UpdateDate) > CONVERT(date, '{last_sync_date}')"
+                    f" {connector} (CONVERT(date, {prefix}UpdateDate) > CONVERT(date, '{last_sync_date}')"
                     f" OR (CONVERT(date, {prefix}UpdateDate) = CONVERT(date, '{last_sync_date}')"
-                    f" AND {prefix}UpdateTS > {last_sync_ts})"
+                    f" AND {prefix}UpdateTS > {last_sync_ts}))"
                 )
         else:
             # Costruisci la query automaticamente dalle chiavi del mapping
