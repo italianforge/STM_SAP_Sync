@@ -17,6 +17,14 @@ from src.sync.engine import SyncEngine
 from src.config.database import DatabaseConfig
 from src.utils.logger import setup_application_logger, setup_error_logger, log_performance
 from src.api.app import run_api_server, _sync_status, _sync_lock
+import smtplib
+import json
+import base64
+import email.mime.multipart
+import email.mime.text
+import email.mime.base
+from email import encoders
+from datetime import datetime, timezone
 
 # Flag per shutdown graceful
 _shutdown_event = threading.Event()
@@ -131,6 +139,235 @@ def run_full_sync(logger, error_logger) -> dict:
     return sync_result
 
 
+def _get_scheduler_base_url() -> str:
+    """Base URL for STM_Scheduler REST API."""
+    return os.environ.get('SCHEDULER_URL', 'http://localhost:5000')
+
+
+def _get_email_settings(logger) -> dict | None:
+    """Fetch email/SMTP settings from STM_Scheduler API. Returns None on error."""
+    try:
+        import requests
+        url = f"{_get_scheduler_base_url()}/api/v1/resources/settings/email"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+        logger.warning(f"Impossibile caricare email settings: HTTP {resp.status_code}")
+    except Exception as e:
+        logger.warning(f"Errore lettura email settings: {e}")
+    return None
+
+
+def dispatch_email_outbox(logger, error_logger) -> int:
+    """
+    Poll pending messages from email_outbox, dispatch via SMTP, update status.
+    Returns number of messages processed.
+    """
+    import requests
+
+    base = _get_scheduler_base_url()
+    processed = 0
+
+    try:
+        resp = requests.get(f"{base}/api/v1/resources/notifications/outbox?status=pending&limit=20", timeout=10)
+        if resp.status_code != 200:
+            return 0
+        messages = resp.json()
+    except Exception as e:
+        logger.warning(f"dispatch_email_outbox: impossibile leggere outbox: {e}")
+        return 0
+
+    if not messages:
+        return 0
+
+    email_cfg = _get_email_settings(logger)
+    if not email_cfg:
+        logger.warning("dispatch_email_outbox: configurazione SMTP non disponibile, skip")
+        return 0
+
+    smtp_host = email_cfg.get('smtp_host', '').strip()
+    if not smtp_host:
+        logger.warning("dispatch_email_outbox: smtp_host non configurato, skip")
+        return 0
+
+    try:
+        smtp_port = int(email_cfg.get('smtp_port') or 587)
+    except (ValueError, TypeError):
+        smtp_port = 587
+
+    smtp_user = email_cfg.get('smtp_user', '').strip()
+    smtp_password = email_cfg.get('smtp_password', '').strip()
+    use_tls = str(email_cfg.get('smtp_use_tls', 'true')).lower() == 'true'
+    from_addr = email_cfg.get('smtp_from_address', smtp_user).strip()
+    from_name = email_cfg.get('smtp_from_name', 'STM Scheduler').strip()
+
+    try:
+        max_retries = int(email_cfg.get('notification_max_retries') or 3)
+    except (ValueError, TypeError):
+        max_retries = 3
+    try:
+        backoff_minutes = int(email_cfg.get('notification_retry_backoff_minutes') or 15)
+    except (ValueError, TypeError):
+        backoff_minutes = 15
+
+    for msg in messages:
+        msg_id = msg['id']
+        try:
+            recipients = json.loads(msg.get('recipients', '[]'))
+            if not recipients:
+                _patch_outbox(base, msg_id, {'status': 'skipped', 'last_error': 'no recipients'}, logger)
+                continue
+
+            # Build MIME message
+            mime = email.mime.multipart.MIMEMultipart('mixed')
+            mime['Subject'] = msg['subject']
+            mime['From'] = f"{from_name} <{from_addr}>" if from_name else from_addr
+            mime['To'] = ', '.join(recipients)
+            if email_cfg.get('smtp_reply_to', '').strip():
+                mime.add_header('Reply-To', email_cfg['smtp_reply_to'].strip())
+
+            body_part = email.mime.text.MIMEText(msg['body_html'], 'html', 'utf-8')
+            mime.attach(body_part)
+
+            # Optional XLSX attachment
+            if msg.get('attachment_xlsx'):
+                xlsx_bytes = base64.b64decode(msg['attachment_xlsx'])
+                part = email.mime.base.MIMEBase('application', 'vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                part.set_payload(xlsx_bytes)
+                encoders.encode_base64(part)
+                event_type = msg.get('event_type', 'attachment')
+                part.add_header('Content-Disposition', 'attachment',
+                                filename=f"{event_type}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.xlsx")
+                mime.attach(part)
+
+            # SMTP dispatch
+            if use_tls:
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+            else:
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30)
+
+            if smtp_user and smtp_password:
+                server.login(smtp_user, smtp_password)
+
+            server.sendmail(from_addr, recipients, mime.as_string())
+            server.quit()
+
+            now_iso = datetime.now(timezone.utc).isoformat()
+            _patch_outbox(base, msg_id, {'status': 'sent', 'sent_at': now_iso}, logger)
+            logger.info(f"Email inviata: outbox_id={msg_id} event_type={msg.get('event_type')} to={recipients}")
+            processed += 1
+
+        except smtplib.SMTPException as e:
+            error_logger.error(f"SMTP error outbox_id={msg_id}: {e}")
+            retry_count = int(msg.get('retry_count', 0)) + 1
+            if retry_count >= max_retries:
+                _patch_outbox(base, msg_id, {'status': 'skipped', 'retry_count': retry_count,
+                                              'last_error': f'SMTP: {e}'}, logger)
+            else:
+                from datetime import timedelta
+                next_retry_minutes = retry_count * backoff_minutes
+                next_retry = (datetime.now(timezone.utc) + timedelta(minutes=next_retry_minutes)).isoformat()
+                _patch_outbox(base, msg_id, {'status': 'failed', 'retry_count': retry_count,
+                                              'last_error': f'SMTP: {e}', 'next_retry_at': next_retry}, logger)
+        except Exception as e:
+            error_logger.error(f"dispatch_email_outbox error outbox_id={msg_id}: {e}")
+            retry_count = int(msg.get('retry_count', 0)) + 1
+            if retry_count >= max_retries:
+                _patch_outbox(base, msg_id, {'status': 'skipped', 'retry_count': retry_count,
+                                              'last_error': str(e)}, logger)
+            else:
+                from datetime import timedelta
+                next_retry_minutes = retry_count * backoff_minutes
+                next_retry = (datetime.now(timezone.utc) + timedelta(minutes=next_retry_minutes)).isoformat()
+                _patch_outbox(base, msg_id, {'status': 'failed', 'retry_count': retry_count,
+                                              'last_error': str(e), 'next_retry_at': next_retry}, logger)
+
+    return processed
+
+
+def _patch_outbox(base_url: str, msg_id: int, payload: dict, logger) -> None:
+    """PATCH outbox message status — fire-and-forget."""
+    try:
+        import requests
+        requests.patch(
+            f"{base_url}/api/v1/resources/notifications/outbox/{msg_id}",
+            json=payload,
+            timeout=10,
+        )
+    except Exception as e:
+        logger.warning(f"_patch_outbox id={msg_id}: {e}")
+
+
+def _trigger_scheduled_notifications(logger, now: 'datetime') -> None:
+    """
+    Check if rfq_digest or understock_report should fire for the current hour.
+    Calls the STM_Scheduler enqueue endpoints which handle deduplication.
+    """
+    import requests
+
+    base = _get_scheduler_base_url()
+
+    try:
+        from sqlalchemy import create_engine, text as sa_text
+        from src.config.database import DatabaseConfig
+        db_config = DatabaseConfig()
+        engine = create_engine(db_config.postgres_url)
+        with engine.connect() as conn:
+            rows = conn.execute(sa_text(
+                "SELECT key, value FROM settings WHERE key IN ("
+                "'rfq_digest_enabled','rfq_digest_hour',"
+                "'understock_report_enabled','understock_report_hour')"
+            )).fetchall()
+        engine.dispose()
+        cfg_map = {r[0]: r[1] for r in rows}
+    except Exception as e:
+        logger.warning(f"_trigger_scheduled_notifications: impossibile leggere settings: {e}")
+        return
+
+    current_hour = now.hour
+
+    # RFQ Digest
+    if str(cfg_map.get('rfq_digest_enabled', 'false')).lower() == 'true':
+        try:
+            digest_hour = int(cfg_map.get('rfq_digest_hour', '0'))
+        except (ValueError, TypeError):
+            digest_hour = 0
+        if current_hour == digest_hour:
+            try:
+                resp = requests.post(f"{base}/api/v1/resources/notifications/enqueue/rfq-digest", timeout=30)
+                if resp.status_code == 409:
+                    logger.debug("rfq_digest: già inviato per oggi, skip")
+                elif resp.status_code == 200:
+                    data = resp.json()
+                    logger.info(f"rfq_digest trigger: run_id={data.get('run_id')} count={data.get('rfq_count')}")
+                else:
+                    logger.warning(f"rfq_digest trigger HTTP {resp.status_code}: {resp.text[:200]}")
+            except Exception as e:
+                logger.warning(f"rfq_digest trigger error: {e}")
+
+    # Understock Report
+    if str(cfg_map.get('understock_report_enabled', 'false')).lower() == 'true':
+        try:
+            report_hour = int(cfg_map.get('understock_report_hour', '7'))
+        except (ValueError, TypeError):
+            report_hour = 7
+        if current_hour == report_hour:
+            try:
+                resp = requests.post(f"{base}/api/v1/resources/notifications/enqueue/understock-report", timeout=30)
+                if resp.status_code == 409:
+                    logger.debug("understock_report: già inviato per oggi, skip")
+                elif resp.status_code == 200:
+                    data = resp.json()
+                    logger.info(f"understock_report trigger: run_id={data.get('run_id')} count={data.get('articoli_count')}")
+                else:
+                    logger.warning(f"understock_report trigger HTTP {resp.status_code}: {resp.text[:200]}")
+            except Exception as e:
+                logger.warning(f"understock_report trigger error: {e}")
+
+
 def scheduler_loop(logger, error_logger):
     """
     Loop principale dello scheduler.
@@ -153,13 +390,31 @@ def scheduler_loop(logger, error_logger):
         logger.info("=" * 50)
         run_full_sync(logger, error_logger)
 
+        # Dispatch eventuali email in coda dopo ogni sync
+        try:
+            dispatch_email_outbox(logger, error_logger)
+        except Exception as e:
+            error_logger.error(f"Post-sync email dispatch error: {e}")
+
+        # Trigger notifiche schedulate (primo controllo del ciclo)
+        try:
+            _trigger_scheduled_notifications(logger, datetime.now(timezone.utc))
+        except Exception as e:
+            error_logger.error(f"Initial notification trigger error: {e}")
+
         # Attendi fino al prossimo ciclo, con possibilità di interruzione e reload
         logger.info(f"Prossima sincronizzazione tra {interval_minutes} minuti")
         elapsed = 0
         check_interval = 10  # controlla ogni 10 secondi
+        email_dispatch_seconds = 5 * 60   # dispatch email ogni 5 minuti
+        elapsed_since_dispatch = 0
+        elapsed_since_trigger = 0
+
         while elapsed < interval_seconds and not _shutdown_event.is_set():
             time.sleep(check_interval)
             elapsed += check_interval
+            elapsed_since_dispatch += check_interval
+            elapsed_since_trigger += check_interval
 
             # Ricarica intervallo se richiesto dalla API
             if api_module._reload_requested:
@@ -169,8 +424,25 @@ def scheduler_loop(logger, error_logger):
                     logger.info(f"Intervallo aggiornato da {interval_minutes} a {new_interval} minuti, riavvio ciclo")
                     interval_minutes = new_interval
                     interval_seconds = new_interval * 60
-                    # Reset timer
                     elapsed = 0
+
+            # Dispatch email outbox ogni 5 minuti
+            if elapsed_since_dispatch >= email_dispatch_seconds:
+                elapsed_since_dispatch = 0
+                try:
+                    n = dispatch_email_outbox(logger, error_logger)
+                    if n:
+                        logger.info(f"Email dispatch: {n} messaggio/i inviato/i")
+                except Exception as e:
+                    error_logger.error(f"Email dispatch error: {e}")
+
+            # Trigger notifiche schedulate ogni 60 minuti
+            if elapsed_since_trigger >= 3600:
+                elapsed_since_trigger = 0
+                try:
+                    _trigger_scheduled_notifications(logger, datetime.now(timezone.utc))
+                except Exception as e:
+                    error_logger.error(f"Scheduled notification trigger error: {e}")
 
     logger.info("Scheduler loop terminato")
 
