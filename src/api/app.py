@@ -10,6 +10,7 @@ import threading
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from flasgger import Swagger
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -17,6 +18,62 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app, resources={r'/api/*': {'origins': '*', 'methods': ['GET', 'POST', 'OPTIONS']}})
+
+# ─── Swagger / OpenAPI documentation ─────────────────────────────────────────
+_swagger_template = {
+    "swagger": "2.0",
+    "info": {
+        "title": "STM SAP Sync API",
+        "description": (
+            "API di controllo per il servizio di sincronizzazione SAP → PostgreSQL.\n\n"
+            "Permette di testare la connessione al database SAP MSSQL, avviare "
+            "sincronizzazioni manuali e monitorarne lo stato."
+        ),
+        "version": "1.0.0",
+    },
+    "basePath": "/api",
+    "consumes": ["application/json"],
+    "produces": ["application/json"],
+    "definitions": {
+        "ConnectionTestRequest": {
+            "type": "object",
+            "required": ["sap_db_server", "sap_db_database"],
+            "properties": {
+                "sap_db_server": {"type": "string", "example": "192.168.1.100"},
+                "sap_db_port": {"type": "string", "default": "1433", "example": "1433"},
+                "sap_db_database": {"type": "string", "example": "SBO_COMPANY"},
+                "sap_db_username": {"type": "string"},
+                "sap_db_password": {"type": "string", "format": "password"},
+                "sap_db_driver": {"type": "string", "default": "SQL Server"},
+            },
+        },
+        "ConnectionTestResponse": {
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "message": {"type": "string"},
+                "latency_ms": {"type": "integer"},
+            },
+        },
+        "SyncStatus": {
+            "type": "object",
+            "properties": {
+                "running": {"type": "boolean"},
+                "last_result": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "errors": {"type": "array", "items": {"type": "object"}},
+                        "completed_at": {"type": "string", "format": "date-time"},
+                    },
+                },
+            },
+        },
+    },
+}
+
+Swagger(app, template=_swagger_template)
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _build_connection_string(data: dict) -> str:
@@ -48,9 +105,26 @@ def _build_connection_string(data: dict) -> str:
 @app.route('/api/test-connection', methods=['POST'])
 def test_connection():
     """
-    Test the SAP MSSQL connection.
-    Expects JSON body with SAP connection fields.
-    Returns: { success: bool, message: str, latency_ms: int }
+    Testa la connessione al database SAP MSSQL.
+    ---
+    tags:
+      - Connessione SAP
+    summary: Test connessione SAP MSSQL
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/ConnectionTestRequest'
+    responses:
+      200:
+        description: Risultato del test (anche in caso di fallimento connessione)
+        schema:
+          $ref: '#/definitions/ConnectionTestResponse'
+      400:
+        description: Parametri obbligatori mancanti
+        schema:
+          $ref: '#/definitions/ConnectionTestResponse'
     """
     data = request.get_json()
     if not data:
@@ -99,6 +173,22 @@ def test_connection():
 
 @app.route('/api/health', methods=['GET'])
 def health():
+    """
+    Health check del servizio SAP Sync.
+    ---
+    tags:
+      - Sistema
+    summary: Health check
+    responses:
+      200:
+        description: Servizio attivo
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: ok
+    """
     return jsonify({'status': 'ok'}), 200
 
 
@@ -157,9 +247,38 @@ def _run_sync_background():
 @app.route('/api/sync', methods=['POST'])
 def trigger_sync():
     """
-    Trigger a full SAP sync using credentials stored in the PostgreSQL settings table.
-    Returns immediately; sync runs in background.
-    Returns: { accepted: bool, message: str }
+    Avvia una sincronizzazione completa SAP → PostgreSQL.
+    ---
+    tags:
+      - Sincronizzazione
+    summary: Avvia sync manuale
+    description: >
+      Lancia la sincronizzazione in background usando le credenziali SAP
+      salvate nella tabella `settings` di PostgreSQL. Risponde immediatamente;
+      usare `/api/sync/status` per monitorare l'avanzamento.
+    responses:
+      202:
+        description: Sincronizzazione avviata
+        schema:
+          type: object
+          properties:
+            accepted:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: Sincronizzazione avviata
+      409:
+        description: Una sincronizzazione è già in corso
+        schema:
+          type: object
+          properties:
+            accepted:
+              type: boolean
+              example: false
+            message:
+              type: string
+              example: Sync già in corso
     """
     if not _sync_lock.acquire(blocking=False):
         return jsonify({'accepted': False, 'message': 'Sync già in corso'}), 409
@@ -174,7 +293,18 @@ def trigger_sync():
 
 @app.route('/api/sync/status', methods=['GET'])
 def sync_status():
-    """Return current sync status and last result."""
+    """
+    Stato corrente della sincronizzazione e risultato dell'ultima esecuzione.
+    ---
+    tags:
+      - Sincronizzazione
+    summary: Stato sincronizzazione
+    responses:
+      200:
+        description: Stato corrente
+        schema:
+          $ref: '#/definitions/SyncStatus'
+    """
     return jsonify({
         'running': _sync_status['running'],
         'last_result': _sync_status['last_result'],
@@ -184,8 +314,26 @@ def sync_status():
 @app.route('/api/reload-config', methods=['POST'])
 def reload_config():
     """
-    Signal the main scheduler loop to reload the sync interval from PostgreSQL settings.
-    Sets a global flag that the scheduler loop checks between runs.
+    Richiede il ricaricamento della configurazione dal database PostgreSQL.
+    ---
+    tags:
+      - Sistema
+    summary: Ricarica configurazione
+    description: >
+      Segnala al loop principale dello scheduler di ricaricare
+      l'intervallo di sincronizzazione dalla tabella `settings`.
+    responses:
+      200:
+        description: Richiesta accettata
+        schema:
+          type: object
+          properties:
+            accepted:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: Ricaricamento configurazione richiesto
     """
     global _reload_requested
     _reload_requested = True
