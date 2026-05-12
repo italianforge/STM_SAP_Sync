@@ -113,11 +113,14 @@ def _run_sync_background():
     """Execute a full sync in a background thread, loading fresh credentials from DB."""
     global _sync_status
     try:
-        from ..config.database import DatabaseConfig
+        from ..config.database import DatabaseConfig, get_postgres_setting
         from ..sync.engine import SyncEngine
 
         db_config = DatabaseConfig()
-        sync_engine = SyncEngine(db_config)
+        article_group_filter = get_postgres_setting(
+            'sap_articoli_itms_grp_cod', default='', postgres_url=db_config.postgres_url
+        )
+        sync_engine = SyncEngine(db_config, article_group_filter=article_group_filter)
 
         tables = [
             'anagraficheArticoli',

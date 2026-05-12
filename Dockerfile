@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Punto di ingresso
-CMD ["python", "sync.py"]
+CMD ["python", "main.py"]

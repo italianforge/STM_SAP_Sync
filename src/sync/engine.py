@@ -11,8 +11,9 @@ from .services import SyncStateService
 class SyncEngine:
     """Engine principale per la sincronizzazione dati SAP"""
     
-    def __init__(self, db_config: DatabaseConfig = None):
+    def __init__(self, db_config: DatabaseConfig = None, article_group_filter: str = None):
         self.db_config = db_config or DatabaseConfig()
+        self.article_group_filter = article_group_filter or ''
         self.logger = setup_sync_logger("Engine")
         self.error_logger = setup_error_logger()
         self.sync_state_service = SyncStateService()
@@ -136,6 +137,16 @@ class SyncEngine:
         if mapping.sap_query:
             # Usa la query custom (es. JOIN multi-tabella)
             query = mapping.sap_query
+            # Applica il filtro ItmsGrpCod per dbo.OITM se configurato
+            if self.article_group_filter and mapping.sap_table == 'dbo.OITM':
+                try:
+                    grp_cod = int(self.article_group_filter)
+                    connector = "AND" if "WHERE" in query.upper() else "WHERE"
+                    query += f" {connector} o.ItmsGrpCod = {grp_cod}"
+                except (ValueError, TypeError):
+                    self.logger.warning(
+                        f"Valore ItmsGrpCod non valido: {self.article_group_filter!r}, filtro ignorato"
+                    )
             # Applica il filtro temporale se necessario
             if last_sync and not mapping.requires_truncate():
                 prefix = f"{mapping.sap_timestamp_prefix}." if mapping.sap_timestamp_prefix else ""

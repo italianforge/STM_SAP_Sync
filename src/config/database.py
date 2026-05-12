@@ -42,6 +42,29 @@ def _build_sap_url_from_fields(server, port, database, username, password, drive
     )
 
 
+def get_postgres_setting(key: str, default: str | None = None, postgres_url: str | None = None) -> str | None:
+    """
+    Read a single value from the PostgreSQL settings table.
+    Returns default if the key is not found or on error.
+    """
+    try:
+        url = postgres_url or os.environ.get('POSTGRES_URL')
+        if not url:
+            return default
+        engine = create_engine(url)
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT value FROM settings WHERE key = :key"),
+                {'key': key}
+            ).fetchone()
+        engine.dispose()
+        if row and row[0] is not None:
+            return str(row[0])
+    except Exception as e:
+        logger.warning(f'Could not read setting {key!r} from PostgreSQL: {e}')
+    return default
+
+
 def _load_sap_url_from_postgres(postgres_url: str) -> str | None:
     """
     Query the PostgreSQL settings table for SAP credentials.

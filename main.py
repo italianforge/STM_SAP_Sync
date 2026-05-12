@@ -60,13 +60,13 @@ def _get_sync_interval(logger) -> int:
     return DEFAULT_INTERVAL_MINUTES
 
 
-def sync_single_table(table_name: str, logger, error_logger) -> dict:
+def sync_single_table(table_name: str, logger, error_logger, article_group_filter: str = '') -> dict:
     """Sincronizza una singola tabella — funzione per threading."""
     table_start = time.time()
     logger.info(f"Avvio sincronizzazione tabella: {table_name}")
     try:
         db_config = DatabaseConfig()
-        sync_engine = SyncEngine(db_config)
+        sync_engine = SyncEngine(db_config, article_group_filter=article_group_filter)
         sync_engine.sync_table(table_name)
         table_duration = time.time() - table_start
         log_performance(logger, f"Sincronizzazione {table_name}", table_duration)
@@ -99,12 +99,20 @@ def run_full_sync(logger, error_logger) -> dict:
     failed_tables = []
 
     try:
+        from src.config.database import get_postgres_setting
+        db_config_tmp = DatabaseConfig()
+        article_group_filter = get_postgres_setting(
+            'sap_articoli_itms_grp_cod', default='', postgres_url=db_config_tmp.postgres_url
+        ) or ''
+        if article_group_filter:
+            logger.info(f"Filtro ItmsGrpCod attivo: {article_group_filter}")
+
         max_workers = min(len(TABLES_TO_SYNC), 3)
         logger.info(f"Avvio sincronizzazione parallela con {max_workers} thread per {len(TABLES_TO_SYNC)} tabelle")
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_table = {
-                executor.submit(sync_single_table, t, logger, error_logger): t
+                executor.submit(sync_single_table, t, logger, error_logger, article_group_filter): t
                 for t in TABLES_TO_SYNC
             }
             for future in as_completed(future_to_table):
