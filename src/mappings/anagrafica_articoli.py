@@ -6,8 +6,16 @@ from sqlalchemy import text
 
 
 def _post_transform_articoli(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Deriva priorita da critico: se critico == 'CRITICO', priorita = 'CRITICO', altrimenti 'ORDINARIO'."""
-    row["priorita"] = "CRITICO" if row.get("critico") == "CRITICO" else "ORDINARIO"
+    """Deriva priorita da U_Aggiuntiva (campo critico): null -> ORDINARIO, PRIORITA% -> PRIORITARIO, CRITICO -> CRITICO."""
+    val = row.get("critico")
+    if val is None or str(val).strip() == "":
+        row["priorita"] = "ORDINARIO"
+    elif str(val).upper().startswith("PRIORITA"):
+        row["priorita"] = "PRIORITARIO"
+    elif str(val).upper() == "CRITICO":
+        row["priorita"] = "CRITICO"
+    else:
+        row["priorita"] = "ORDINARIO"
     return row
 
 

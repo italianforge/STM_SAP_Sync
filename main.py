@@ -398,6 +398,14 @@ def scheduler_loop(logger, error_logger):
         logger.info("=" * 50)
         run_full_sync(logger, error_logger)
 
+        # Riconcilia RFQ aperte con ordini di acquisto appena sincronizzati
+        try:
+            from src.sync.reconciler import reconcile_rfq_with_orders
+            db_config_rec = DatabaseConfig()
+            reconcile_rfq_with_orders(db_config_rec.postgres_url, logger)
+        except Exception as e:
+            error_logger.error(f"Post-sync RFQ reconciliation error: {e}")
+
         # Dispatch eventuali email in coda dopo ogni sync
         try:
             dispatch_email_outbox(logger, error_logger)
