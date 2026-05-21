@@ -22,7 +22,7 @@ WITH open_rfq AS (
         r.cod_business_partner,
         r.created_at
     FROM sap.richieste_offerte r
-    WHERE r.stato IN ('NEW', 'PROCESSED')
+    WHERE r.ordine_acquisto_id IS NULL
 ),
 best_order AS (
     SELECT DISTINCT ON (r.cod_articolo, r.cod_business_partner)
@@ -40,12 +40,11 @@ best_order AS (
 )
 UPDATE sap.richieste_offerte r
 SET
-    stato = 'COMPLETED',
     ordine_acquisto_id = b.ordine_acquisto_id
 FROM best_order b
 WHERE r.cod_articolo = b.cod_articolo
   AND r.cod_business_partner = b.cod_business_partner
-  AND r.stato IN ('NEW', 'PROCESSED')
+  AND r.ordine_acquisto_id IS NULL
 """)
 
 

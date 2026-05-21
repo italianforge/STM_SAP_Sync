@@ -11,6 +11,7 @@ class SAP_OrdiniAcquisto(Base):
     doc_date = Column(DateTime)
     doc_due_date = Column(DateTime)
     cod_business_partner = Column(String)
+    status = Column(String(10), default=None)
     last_synced_at = Column(DateTime)
 
     def __repr__(self):

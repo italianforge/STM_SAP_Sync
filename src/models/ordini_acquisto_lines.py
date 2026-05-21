@@ -11,6 +11,7 @@ class SAP_OrdiniAcquistoLine(Base):
     cod_articolo = Column(String)
     quantity = Column(Float, default=0.0)
     data_consegna = Column(Date, nullable=True)
+    status = Column(String(10), default=None)
 
     def __repr__(self):
         return f"<SAP_OrdiniAcquistoLine(id='{self.id}', cod_documento='{self.cod_documento}', cod_articolo='{self.cod_articolo}', quantity='{self.quantity}')>"

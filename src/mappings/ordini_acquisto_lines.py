@@ -9,11 +9,19 @@ SELECT
     p.DocEntry,
     p.ItemCode,
     p.Quantity,
-    p.ShipDate
+    p.ShipDate,
+    p.LineStatus
 FROM dbo.POR1 p
 INNER JOIN dbo.OPOR o ON p.DocEntry = o.DocEntry
 WHERE o.DocDate >= DATEADD(year, -1, GETDATE())
 """.strip()
+
+
+def _map_line_status(value):
+    """Mappa LineStatus SAP (C/O) in status leggibile (CHIUSO/APERTO)"""
+    if value == 'C':
+        return 'CHIUSO'
+    return 'APERTO'
 
 
 MAPPING_ORDINI_ACQUISTO_LINES = TableMapping(
@@ -25,11 +33,13 @@ MAPPING_ORDINI_ACQUISTO_LINES = TableMapping(
         "ItemCode": "cod_articolo",
         "Quantity": "quantity",
         "ShipDate": "data_consegna",
+        "LineStatus": "status",
     },
     transformations={
         "cod_articolo": safe_string,
         "quantity": safe_float,
         "data_consegna": safe_date,
+        "status": _map_line_status,
     },
     primary_key_sap=["LineNum", "DocEntry"],
     sync_strategy=SyncStrategy.TRUNCATE_INSERT,

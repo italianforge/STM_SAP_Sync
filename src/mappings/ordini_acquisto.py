@@ -10,11 +10,19 @@ SELECT
     DocDate,
     DocDueDate,
     CardCode,
+    DocStatus,
     UpdateDate,
     UpdateTS
 FROM dbo.OPOR
 WHERE DocDate >= DATEADD(year, -1, GETDATE())
 """.strip()
+
+
+def _map_doc_status(value):
+    """Mappa DocStatus SAP (C/O) in status leggibile (CHIUSO/APERTO)"""
+    if value == 'C':
+        return 'CHIUSO'
+    return 'APERTO'
 
 
 MAPPING_ORDINI_ACQUISTO = TableMapping(
@@ -26,6 +34,7 @@ MAPPING_ORDINI_ACQUISTO = TableMapping(
         "DocDate": "doc_date",
         "DocDueDate": "doc_due_date",
         "CardCode": "cod_business_partner",
+        "DocStatus": "status",
         "UpdateDate": "_update_date",  # Campo temporaneo per la trasformazione
         "UpdateTS": "_update_ts"       # Campo temporaneo per la trasformazione
     },
@@ -33,7 +42,8 @@ MAPPING_ORDINI_ACQUISTO = TableMapping(
         "code": safe_int,
         "doc_date": safe_datetime,
         "doc_due_date": safe_datetime,
-        "cod_business_partner": safe_string
+        "cod_business_partner": safe_string,
+        "status": _map_doc_status
     },
     primary_key_sap=["DocEntry"],
     sync_strategy=SyncStrategy.UPSERT,
