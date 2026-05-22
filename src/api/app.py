@@ -98,7 +98,7 @@ def _build_connection_string(data: dict) -> str:
 
     return (
         f'mssql+pyodbc://{username}:{encoded_password}@{host}/{database}'
-        f'?driver={driver_encoded}&trusted_connection=no'
+        f'?driver={driver_encoded}&trusted_connection=no&TrustServerCertificate=yes'
     )
 
 

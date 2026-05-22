@@ -38,7 +38,7 @@ def _build_sap_url_from_fields(server, port, database, username, password, drive
     driver_encoded = (driver or 'SQL Server').replace(' ', '+')
     return (
         f'mssql+pyodbc://{username}:{encoded_password}@{host}/{database}'
-        f'?driver={driver_encoded}&trusted_connection=no'
+        f'?driver={driver_encoded}&trusted_connection=no&TrustServerCertificate=yes'
     )
 
 
