@@ -13,7 +13,9 @@ SELECT
     p.LineStatus
 FROM dbo.POR1 p
 INNER JOIN dbo.OPOR o ON p.DocEntry = o.DocEntry
+INNER JOIN dbo.OITM i ON p.ItemCode = i.ItemCode
 WHERE o.DocDate >= DATEADD(year, -1, GETDATE())
+  AND (i.QryGroup14 = 'Y' OR i.QryGroup15 = 'Y' OR i.QryGroup16 = 'Y')
 """.strip()
 
 

@@ -9,6 +9,7 @@ class SAP_AnagraficheBusinessPartner(Base):
     id = Column(String, primary_key=True)
     name = Column(String)
     type = Column(String)
+    email = Column(String)
     last_synced_at = Column(DateTime)
     
     def __repr__(self):

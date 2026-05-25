@@ -15,6 +15,12 @@ SELECT
     UpdateTS
 FROM dbo.OPOR
 WHERE DocDate >= DATEADD(year, -1, GETDATE())
+  AND EXISTS (
+      SELECT 1 FROM dbo.POR1 p
+      INNER JOIN dbo.OITM i ON p.ItemCode = i.ItemCode
+      WHERE p.DocEntry = dbo.OPOR.DocEntry
+        AND (i.QryGroup14 = 'Y' OR i.QryGroup15 = 'Y' OR i.QryGroup16 = 'Y')
+  )
 """.strip()
 
 
