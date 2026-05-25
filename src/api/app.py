@@ -207,10 +207,7 @@ def _run_sync_background():
         from ..sync.engine import SyncEngine
 
         db_config = DatabaseConfig()
-        article_group_filter = get_postgres_setting(
-            'sap_articoli_itms_grp_cod', default='', postgres_url=db_config.postgres_url
-        )
-        sync_engine = SyncEngine(db_config, article_group_filter=article_group_filter)
+        sync_engine = SyncEngine(db_config)
 
         tables = [
             'anagraficheArticoli',

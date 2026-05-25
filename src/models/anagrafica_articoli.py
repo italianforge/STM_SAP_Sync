@@ -21,6 +21,7 @@ class SAP_AnagraficheArticoli(Base):
     qty_riordino = Column(Float)
     cod_business_partner_pref = Column(String)
     priorita = Column(String)
+    categoria = Column(String)  # MODULA | DEPOSITA | RICAMBI
     last_synced_at = Column(DateTime)
     
     def __repr__(self):

@@ -16,6 +16,20 @@ def _post_transform_articoli(row: Dict[str, Any]) -> Dict[str, Any]:
         row["priorita"] = "CRITICO"
     else:
         row["priorita"] = "ORDINARIO"
+
+    # Deriva categoria da QryGroup14/15/16
+    # QryGroup16 = Y -> MODULA, QryGroup14 = Y -> DEPOSITA, QryGroup15 = Y -> RICAMBI
+    qry14 = str(row.pop("_qry_group14", "") or "").strip().upper()
+    qry15 = str(row.pop("_qry_group15", "") or "").strip().upper()
+    qry16 = str(row.pop("_qry_group16", "") or "").strip().upper()
+    if qry16 == "Y":
+        row["categoria"] = "MODULA"
+    elif qry14 == "Y":
+        row["categoria"] = "DEPOSITA"
+    elif qry15 == "Y":
+        row["categoria"] = "RICAMBI"
+    else:
+        row["categoria"] = None
     return row
 
 
@@ -66,6 +80,9 @@ SELECT
     o.MinLevel,
     o.ReorderQty,
     o.CardCode,
+    o.QryGroup14,
+    o.QryGroup15,
+    o.QryGroup16,
     o.UpdateDate,
     o.UpdateTS
 FROM dbo.OITM o
@@ -90,6 +107,9 @@ MAPPING_ANAGRAFICHE_ARTICOLI = TableMapping(
         "MinLevel": "scorta_minima",
         "ReorderQty": "qty_riordino",
         "CardCode": "cod_business_partner_pref",   # OITM
+        "QryGroup14": "_qry_group14",  # Campo temporaneo per derivare categoria
+        "QryGroup15": "_qry_group15",  # Campo temporaneo per derivare categoria
+        "QryGroup16": "_qry_group16",  # Campo temporaneo per derivare categoria
         "UpdateDate": "_update_date",  # Campo temporaneo per la trasformazione
         "UpdateTS": "_update_ts"       # Campo temporaneo per la trasformazione
     },

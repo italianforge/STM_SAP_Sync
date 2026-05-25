@@ -53,7 +53,12 @@ class TableMapping:
         """Trasforma una riga SAP in formato PostgreSQL"""
         pg_data = {}
         
+        # Lookup case-insensitive: pyodbc può restituire nomi colonna con casing diverso
+        sap_row_ci = {k.lower(): v for k, v in sap_row.items()}
+        
         for sap_col, pg_col in self.column_mappings.items():
+            if sap_col.lower() in sap_row_ci:
+                sap_row[sap_col] = sap_row_ci[sap_col.lower()]  # normalizza chiave
             if sap_col in sap_row:
                 value = sap_row[sap_col]
                 
@@ -61,9 +66,8 @@ class TableMapping:
                 if pg_col in self.transformations:
                     value = self.transformations[pg_col](value)
                 
-                # Non aggiungere campi temporanei che iniziano con _
-                if not pg_col.startswith('_'):
-                    pg_data[pg_col] = value
+                # Includi anche i campi temporanei (_) così la post_transform li può leggere
+                pg_data[pg_col] = value
         
         # Gestione speciale per il timestamp SAP combinato
         if '_update_date' in [col for col in self.column_mappings.values()] and '_update_ts' in [col for col in self.column_mappings.values()]:
@@ -72,5 +76,8 @@ class TableMapping:
         # Applica post-trasformazione se presente
         if self.post_transform:
             pg_data = self.post_transform(pg_data)
+
+        # Rimuovi tutti i campi temporanei rimasti (prefisso _)
+        pg_data = {k: v for k, v in pg_data.items() if not k.startswith('_')}
 
         return pg_data
