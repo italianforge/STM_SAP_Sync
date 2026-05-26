@@ -60,6 +60,30 @@ def _get_sync_interval(logger) -> int:
     return DEFAULT_INTERVAL_MINUTES
 
 
+def _cleanup_orphan_order_headers(logger) -> None:
+    """Rimuove testate ordine senza righe valide importate.
+    Eseguita sequenzialmente dopo tutti i sync paralleli.
+    """
+    try:
+        from sqlalchemy import create_engine, text
+        db_config = DatabaseConfig()
+        engine = create_engine(db_config.postgres_url)
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                DELETE FROM sap.ordini_acquisto
+                WHERE id NOT IN (
+                    SELECT DISTINCT cod_documento FROM sap.ordini_acquisto_lines
+                )
+            """))
+            conn.commit()
+            deleted = result.rowcount
+        engine.dispose()
+        if deleted:
+            logger.info(f"Cleanup ordini: rimossi {deleted} ordini senza righe valide")
+    except Exception as e:
+        logger.warning(f"Cleanup orphan headers fallito (non bloccante): {e}")
+
+
 def sync_single_table(table_name: str, logger, error_logger) -> dict:
     """Sincronizza una singola tabella — funzione per threading."""
     table_start = time.time()
@@ -119,6 +143,9 @@ def run_full_sync(logger, error_logger) -> dict:
         total_duration = time.time() - start_time
         successful = len([r for r in results if r["success"]])
         logger.info(f"Riepilogo: {successful}/{len(TABLES_TO_SYNC)} riuscite in {total_duration:.2f}s")
+
+        # Cleanup sequenziale: rimuove testate senza righe (entrambe le sync sono completate)
+        _cleanup_orphan_order_headers(logger)
 
         sync_result = {
             'success': len(failed_tables) == 0,
