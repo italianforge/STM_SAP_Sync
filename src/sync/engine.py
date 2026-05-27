@@ -225,7 +225,8 @@ class SyncEngine:
                 processed += len(batch_records)
                 log_performance(logger, operation_name, batch_duration, len(batch_records))
             except Exception as e:
-                error_count += 1
+                error_count += len(batch_records)
+                pg_session.rollback()
                 log_database_error(logger, f"Final batch {operation_name.lower()}", e)
 
         return processed, error_count, max_ts
