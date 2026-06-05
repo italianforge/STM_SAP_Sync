@@ -30,8 +30,8 @@ from datetime import datetime, timezone
 _shutdown_event = threading.Event()
 
 TABLES_TO_SYNC = [
-    "anagraficheArticoli",
     "anagraficheBusinessPartner",
+    "anagraficheArticoli",
     "catalogoBusinessPartner",
     "ordiniAcquisto",
     "ordiniAcquistoLines",

@@ -210,8 +210,8 @@ def _run_sync_background():
         sync_engine = SyncEngine(db_config)
 
         tables = [
-            'anagraficheArticoli',
             'anagraficheBusinessPartner',
+            'anagraficheArticoli',
             'catalogoBusinessPartner',
             'ordiniAcquisto',
             'ordiniAcquistoLines',

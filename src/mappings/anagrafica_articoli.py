@@ -100,6 +100,7 @@ MAPPING_ANAGRAFICHE_ARTICOLI = TableMapping(
         "U_FamigliaTornitura": "ubicazione",
         "U_FamigliaLEV3": "stato",
         "U_SFT_FAMILY_LEV1": "costruttore",
+        # U_SFT_FAMILY_LEV2: CardCode FK verso anagrafica_business_partner (non più nome libero)
         "U_SFT_FAMILY_LEV2": "fornitore",
         "U_SFT_FAMILY_LEV3": "tipo_articolo",
         "U_SFT_PURCH_SPEC": "auto_ingranaggi",
