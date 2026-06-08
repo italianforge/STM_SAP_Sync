@@ -132,6 +132,7 @@ dmypy.json
 config.py
 config.ini
 .env.local
+.env.prod
 .env.production
 .env.development
 
