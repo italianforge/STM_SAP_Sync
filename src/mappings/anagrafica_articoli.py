@@ -73,7 +73,6 @@ SELECT
     o.U_FamigliaLEV2,
     o.U_FamigliaLEV3,
     o.U_SFT_FAMILY_LEV1,
-    o.U_SFT_FAMILY_LEV2,
     o.U_SFT_FAMILY_LEV3,
     o.U_SFT_PURCH_SPEC,
     o.U_Dev_ArtBase,
@@ -100,8 +99,8 @@ MAPPING_ANAGRAFICHE_ARTICOLI = TableMapping(
         "U_FamigliaTornitura": "ubicazione",
         "U_FamigliaLEV3": "stato",
         "U_SFT_FAMILY_LEV1": "costruttore",
-        # U_SFT_FAMILY_LEV2: CardCode FK verso anagrafica_business_partner (non più nome libero)
-        "U_SFT_FAMILY_LEV2": "fornitore",
+        # U_SFT_FAMILY_LEV2 -> fornitore: disabilitato, usare cod_business_partner_pref (CardCode)
+        # "U_SFT_FAMILY_LEV2": "fornitore",
         "U_SFT_FAMILY_LEV3": "tipo_articolo",
         "U_SFT_PURCH_SPEC": "auto_ingranaggi",
         "U_Dev_ArtBase": "note_acquisti",  
@@ -121,7 +120,7 @@ MAPPING_ANAGRAFICHE_ARTICOLI = TableMapping(
         "ubicazione": safe_string,
         "stato": safe_string,
         "costruttore": safe_string,
-        "fornitore": safe_string,
+        # "fornitore": safe_string,
         "tipo_articolo": safe_string,
         "auto_ingranaggi": safe_string,
         "note_acquisti": safe_string,

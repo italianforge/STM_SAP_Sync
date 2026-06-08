@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../../../STM_Scheduler"
+		},
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../STM_Scheduler_FE"
+		}
+	],
+	"settings": {}
+}
