@@ -251,14 +251,19 @@ class SyncEngine:
         pg_primary_keys = mapping.get_pg_primary_key_columns()
         
         # Trova le colonne che NON sono primary key
-        non_pk_columns = [col.name for col in mapping.pg_model.__table__.columns 
+        non_pk_columns = [col.name for col in mapping.pg_model.__table__.columns
                         if col.name not in pg_primary_keys]
-        
+        # Aggiorna solo colonne presenti nel payload sync (es. art_equivalente non mappato da SAP)
+        synced_columns = set()
+        for rec in records:
+            synced_columns.update(rec.keys())
+        update_columns = [c for c in non_pk_columns if c in synced_columns]
+
         # Se ci sono colonne non-PK, usa ON CONFLICT DO UPDATE
-        if non_pk_columns:
+        if update_columns:
             stmt = stmt.on_conflict_do_update(
                 index_elements=pg_primary_keys,
-                set_={col_name: stmt.excluded[col_name] for col_name in non_pk_columns}
+                set_={col_name: stmt.excluded[col_name] for col_name in update_columns}
             )
         else:
             # Se tutte le colonne sono PK, usa ON CONFLICT DO NOTHING
