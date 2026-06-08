@@ -33,6 +33,15 @@ def _post_transform_articoli(row: Dict[str, Any]) -> Dict[str, Any]:
     return row
 
 
+def _post_sync_articoli(pg_session, rows):
+    """Callback post-sync: associazioni macchina + stock DEPOSYTA."""
+    _sync_assoc_articoli_macchina(pg_session, rows)
+    from ..config.database import DatabaseConfig
+    from ..sync.deposyta_enrichment import enrich_deposita_stock
+
+    enrich_deposita_stock(pg_session, DatabaseConfig())
+
+
 def _sync_assoc_articoli_macchina(pg_session, rows):
     """
     Per ogni articolo nei raw SAP rows, aggiorna sap.assoc_articoli_macchina
@@ -133,5 +142,5 @@ MAPPING_ANAGRAFICHE_ARTICOLI = TableMapping(
     sap_query=_ANAGRAFICA_ARTICOLI_QUERY,
     sap_timestamp_prefix="o",
     post_transform=_post_transform_articoli,
-    post_sync_callback=_sync_assoc_articoli_macchina,
+    post_sync_callback=_post_sync_articoli,
 )

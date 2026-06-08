@@ -60,34 +60,34 @@ class SyncEngine:
             
             if not rows:
                 table_logger.info("Nessuna riga da sincronizzare")
-                return
+            else:
+                # Se richiesto, truncate la tabella prima di inserire i nuovi dati
+                if mapping.requires_truncate():
+                    self._truncate_table(pg_session, mapping, table_logger)
 
-            # Se richiesto, truncate la tabella prima di inserire i nuovi dati
-            if mapping.requires_truncate():
-                self._truncate_table(pg_session, mapping, table_logger)
+                # Processa i dati
+                processed_records, error_count, max_ts = self._process_rows(
+                    rows, mapping, pg_session, table_logger
+                )
 
-            # Processa i dati
-            processed_records, error_count, max_ts = self._process_rows(
-                rows, mapping, pg_session, table_logger
-            )
+                # Aggiorna stato sincronizzazione solo se non è truncate_insert
+                if max_ts and not mapping.requires_truncate():
+                    self.sync_state_service.update_last_sync(pg_session, table_name, max_ts)
+                    table_logger.info(f"Aggiornato timestamp sincronizzazione: {max_ts}")
+                elif mapping.requires_truncate():
+                    from datetime import datetime
+                    current_ts = datetime.now()
+                    self.sync_state_service.update_last_sync(pg_session, table_name, current_ts)
+                    table_logger.info(
+                        f"Aggiornato timestamp sincronizzazione (truncate_insert): {current_ts}"
+                    )
 
-            # Esegui post-sync callback se definito
+            # Callback anche senza delta SAP (es. arricchimento stock DEPOSYTA)
             if mapping.post_sync_callback:
                 table_logger.info("Esecuzione post_sync_callback...")
                 mapping.post_sync_callback(pg_session, rows)
                 table_logger.info("post_sync_callback completato")
 
-            # Aggiorna stato sincronizzazione solo se non è truncate_insert
-            if max_ts and not mapping.requires_truncate():
-                self.sync_state_service.update_last_sync(pg_session, table_name, max_ts)
-                table_logger.info(f"Aggiornato timestamp sincronizzazione: {max_ts}")
-            elif mapping.requires_truncate():
-                # Per truncate_insert, aggiorna con il timestamp corrente
-                from datetime import datetime
-                current_ts = datetime.now()
-                self.sync_state_service.update_last_sync(pg_session, table_name, current_ts)
-                table_logger.info(f"Aggiornato timestamp sincronizzazione (truncate_insert): {current_ts}")
-            
             pg_session.commit()
             
             # Log statistiche finali

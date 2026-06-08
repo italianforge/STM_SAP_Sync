@@ -31,14 +31,64 @@ def _decrypt(token: str) -> str | None:
         return None
 
 
-def _build_sap_url_from_fields(server, port, database, username, password, driver) -> str:
+# Allineato al driver SAP in uso sulle postazioni STM (SQL Server legacy ODBC).
+_DEFAULT_MSSQL_DRIVER = 'SQL Server'
+
+
+def _encode_mssql_server(server: str) -> str:
+    """Codifica il nome server per URL SQLAlchemy (istanze nominate es. host\\INSTANCE)."""
+    return (server or '').replace('\\', '%5C')
+
+
+def _build_mssql_url_from_fields(
+    server,
+    port,
+    database,
+    username,
+    password,
+    driver=None,
+) -> str:
     from urllib.parse import quote_plus
+
     encoded_password = quote_plus(password or '')
-    host = f'{server}:{port}' if port and str(port) != '1433' else server
-    driver_encoded = (driver or 'SQL Server').replace(' ', '+')
+    host = _encode_mssql_server(server)
+    if port and str(port) != '1433':
+        host = f'{host}:{port}'
+    driver_encoded = (driver or _DEFAULT_MSSQL_DRIVER).replace(' ', '+')
     return (
         f'mssql+pyodbc://{username}:{encoded_password}@{host}/{database}'
         f'?driver={driver_encoded}&trusted_connection=no&TrustServerCertificate=yes'
+    )
+
+
+def _build_sap_url_from_fields(server, port, database, username, password, driver) -> str:
+    return _build_mssql_url_from_fields(server, port, database, username, password, driver)
+
+
+def _load_mssql_url_from_env(prefix: str) -> str | None:
+    """
+    Costruisce l'URL MSSQL da variabili d'ambiente con prefisso (es. DEPOSYTA, MODULA).
+    Variabili attese: {PREFIX}_DB_URL oppure server/database/username/password.
+    """
+    direct_url = os.getenv(f'{prefix}_DB_URL', '').strip()
+    if direct_url:
+        return direct_url
+
+    server = os.getenv(f'{prefix}_DB_SERVER', '').strip()
+    database = os.getenv(f'{prefix}_DB_DATABASE', '').strip()
+    username = os.getenv(f'{prefix}_DB_USERNAME', '').strip()
+    password = os.getenv(f'{prefix}_DB_PASSWORD', '')
+
+    if not all([server, database, username, password]):
+        return None
+
+    return _build_mssql_url_from_fields(
+        server=server,
+        port=os.getenv(f'{prefix}_DB_PORT', '1433'),
+        database=database,
+        username=username,
+        password=password,
+        driver=os.getenv(f'{prefix}_DB_DRIVER', _DEFAULT_MSSQL_DRIVER),
     )
 
 
@@ -130,13 +180,39 @@ class DatabaseConfig:
             logger.info('SAP connection loaded from .env file (fallback)')
             self.sap_db_url = os.getenv("SAP_DB_URL")
 
+        self.deposyta_db_url = _load_mssql_url_from_env('DEPOSYTA')
+        self.modula_db_url = _load_mssql_url_from_env('MODULA')
+
         # Crea engines
         self.pg_engine = create_engine(self.postgres_url)
         self.sap_engine = create_engine(self.sap_db_url)
 
+        self.deposyta_engine = (
+            create_engine(self.deposyta_db_url) if self.deposyta_db_url else None
+        )
+        self.modula_engine = (
+            create_engine(self.modula_db_url) if self.modula_db_url else None
+        )
+
         # Crea session makers
         self.PGSession = sessionmaker(bind=self.pg_engine)
         self.SAPSession = sessionmaker(bind=self.sap_engine)
+        self.DeposytaSession = (
+            sessionmaker(bind=self.deposyta_engine) if self.deposyta_engine else None
+        )
+        self.ModulaSession = (
+            sessionmaker(bind=self.modula_engine) if self.modula_engine else None
+        )
+
+        if self.deposyta_db_url:
+            logger.info('DEPOSYTA connection configured')
+        else:
+            logger.warning('DEPOSYTA connection not configured (missing env credentials)')
+
+        if self.modula_db_url:
+            logger.info('MODULA connection configured')
+        else:
+            logger.warning('MODULA connection not configured (missing env credentials)')
 
         print(f"Loaded configuration for environment: {self.environment}")
 
@@ -147,4 +223,22 @@ class DatabaseConfig:
     def get_sap_session(self):
         """Ottieni una nuova sessione SAP"""
         return self.SAPSession()
+
+    def get_deposyta_session(self):
+        """Ottieni una nuova sessione DEPOSYTA (SQL Server DBDATA)."""
+        if not self.DeposytaSession:
+            raise RuntimeError(
+                'Connessione DEPOSYTA non configurata: impostare DEPOSYTA_DB_USERNAME '
+                'e DEPOSYTA_DB_PASSWORD nel file .env'
+            )
+        return self.DeposytaSession()
+
+    def get_modula_session(self):
+        """Ottieni una nuova sessione MODULA (SQL Server SYSTOREDB)."""
+        if not self.ModulaSession:
+            raise RuntimeError(
+                'Connessione MODULA non configurata: impostare MODULA_DB_USERNAME '
+                'e MODULA_DB_PASSWORD nel file .env'
+            )
+        return self.ModulaSession()
 
