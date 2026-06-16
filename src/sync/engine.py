@@ -65,6 +65,9 @@ class SyncEngine:
                 if mapping.requires_truncate():
                     self._truncate_table(pg_session, mapping, table_logger)
 
+                if mapping.pre_sync_callback:
+                    mapping.pre_sync_callback(sap_session)
+
                 # Processa i dati
                 processed_records, error_count, max_ts = self._process_rows(
                     rows, mapping, pg_session, table_logger
@@ -93,7 +96,12 @@ class SyncEngine:
             # Log statistiche finali
             total_duration = time.time() - start_time
             log_sync_stats(table_logger, table_name, total_records, processed_records, error_count, total_duration)
-            table_logger.info(f"Sincronizzazione {table_name} completata con successo")
+            if error_count:
+                table_logger.warning(
+                    f"Sincronizzazione {table_name} completata con {error_count} righe skippate"
+                )
+            else:
+                table_logger.info(f"Sincronizzazione {table_name} completata con successo")
 
         except Exception as e:
             pg_session.rollback()
@@ -189,20 +197,15 @@ class SyncEngine:
                 if len(batch_records) >= self.batch_size:
                     batch_start = time.time()
                     operation_name = "Batch insert" if mapping.requires_truncate() else "Batch upsert"
-                    try:
-                        if mapping.requires_truncate():
-                            self._execute_insert_batch(pg_session, mapping, batch_records)
-                        else:
-                            self._execute_upsert_batch(pg_session, mapping, batch_records)
-                        
-                        batch_duration = time.time() - batch_start
-                        processed += len(batch_records)
-                        log_performance(logger, operation_name, batch_duration, len(batch_records))
+                    batch_ok, batch_err = self._execute_batch_with_fallback(
+                        pg_session, mapping, batch_records, logger, operation_name
+                    )
+                    batch_duration = time.time() - batch_start
+                    processed += batch_ok
+                    error_count += batch_err
+                    if batch_ok:
+                        log_performance(logger, operation_name, batch_duration, batch_ok)
                         logger.info(f"Processate {processed}/{len(rows)} righe...")
-                    except Exception as batch_e:
-                        error_count += len(batch_records)
-                        pg_session.rollback()
-                        log_database_error(logger, f"Batch alla riga {row_num}", batch_e)
                     batch_records = []
                     
             except Exception as e:
@@ -213,23 +216,71 @@ class SyncEngine:
         # Processa l'ultimo batch se ci sono record rimanenti
         if batch_records:
             operation_name = "Final batch insert" if mapping.requires_truncate() else "Final batch upsert"
-            try:
-                batch_start = time.time()
-                
-                if mapping.requires_truncate():
-                    self._execute_insert_batch(pg_session, mapping, batch_records)
-                else:
-                    self._execute_upsert_batch(pg_session, mapping, batch_records)
-                
-                batch_duration = time.time() - batch_start
-                processed += len(batch_records)
-                log_performance(logger, operation_name, batch_duration, len(batch_records))
-            except Exception as e:
-                error_count += len(batch_records)
-                pg_session.rollback()
-                log_database_error(logger, f"Final batch {operation_name.lower()}", e)
+            batch_start = time.time()
+            batch_ok, batch_err = self._execute_batch_with_fallback(
+                pg_session, mapping, batch_records, logger, operation_name
+            )
+            batch_duration = time.time() - batch_start
+            processed += batch_ok
+            error_count += batch_err
+            if batch_ok:
+                log_performance(logger, operation_name, batch_duration, batch_ok)
 
         return processed, error_count, max_ts
+    
+    def _record_label(self, mapping, record: dict) -> str:
+        """Identificativo leggibile di una riga per i log."""
+        pk_cols = mapping.get_pg_primary_key_columns()
+        if not pk_cols:
+            return '?'
+        parts = [str(record.get(col, '')) for col in pk_cols]
+        return '/'.join(parts) or '?'
+
+    def _execute_batch_with_fallback(self, session, mapping, records, logger, operation_name):
+        """
+        Esegue un batch; se fallisce, riprova riga per riga skippando quelle in errore.
+        Usa savepoint per non annullare i batch già applicati nella stessa transazione.
+        Restituisce (righe_ok, righe_skippate).
+        """
+        if not records:
+            return 0, 0
+
+        savepoint = session.begin_nested()
+        try:
+            if mapping.requires_truncate():
+                self._execute_insert_batch(session, mapping, records)
+            else:
+                self._execute_upsert_batch(session, mapping, records)
+            savepoint.commit()
+            return len(records), 0
+        except Exception as batch_e:
+            savepoint.rollback()
+            logger.warning(
+                f"{operation_name} fallito su {len(records)} righe, retry singolo: "
+                f"{type(batch_e).__name__}: {batch_e}"
+            )
+
+        ok, err = 0, 0
+        for rec in records:
+            row_sp = session.begin_nested()
+            try:
+                if mapping.requires_truncate():
+                    self._execute_insert_batch(session, mapping, [rec])
+                else:
+                    self._execute_upsert_batch(session, mapping, [rec])
+                row_sp.commit()
+                ok += 1
+            except Exception as row_e:
+                row_sp.rollback()
+                err += 1
+                log_database_error(
+                    logger,
+                    f"Riga skippata ({self._record_label(mapping, rec)})",
+                    row_e,
+                )
+        if err:
+            logger.warning(f"{operation_name}: {ok} righe salvate, {err} skippate")
+        return ok, err
     
     def _execute_insert_batch(self, session, mapping, records):
         """Esegue insert semplice di un batch di record (per truncate_insert)"""

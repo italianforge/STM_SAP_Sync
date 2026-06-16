@@ -35,6 +35,12 @@ def _decrypt(token: str) -> str | None:
 _DEFAULT_MSSQL_DRIVER = 'SQL Server'
 
 
+def _uses_modern_odbc_driver(driver: str | None) -> bool:
+    """TrustServerCertificate è supportato solo da ODBC Driver 17/18."""
+    name = (driver or _DEFAULT_MSSQL_DRIVER).lower()
+    return 'odbc driver 17' in name or 'odbc driver 18' in name
+
+
 def _encode_mssql_server(server: str) -> str:
     """Codifica il nome server per URL SQLAlchemy (istanze nominate es. host\\INSTANCE)."""
     return (server or '').replace('\\', '%5C')
@@ -50,14 +56,40 @@ def _build_mssql_url_from_fields(
 ) -> str:
     from urllib.parse import quote_plus
 
+    driver_name = driver or _DEFAULT_MSSQL_DRIVER
     encoded_password = quote_plus(password or '')
+    encoded_username = quote_plus(username or '')
+
+    # Istanze nominate (host\INSTANCE): odbc_connect evita problemi di parsing URL.
+    if server and '\\' in server:
+        host_part, instance_name = server.split('\\', 1)
+        if port and str(port) not in ('', '1433'):
+            # Porta TCP esplicita: evita SQL Browser (UDP 1434).
+            server_arg = f'{host_part},{port}'
+        else:
+            server_arg = server
+        odbc_parts = [
+            f'DRIVER={{{driver_name}}}',
+            f'SERVER={server_arg}',
+            f'DATABASE={database}',
+            f'UID={username}',
+            f'PWD={password or ""}',
+        ]
+        if _uses_modern_odbc_driver(driver_name):
+            odbc_parts.append('TrustServerCertificate=yes')
+        odbc_connect = ';'.join(odbc_parts)
+        return f'mssql+pyodbc:///?odbc_connect={quote_plus(odbc_connect)}'
+
     host = _encode_mssql_server(server)
     if port and str(port) != '1433':
         host = f'{host}:{port}'
-    driver_encoded = (driver or _DEFAULT_MSSQL_DRIVER).replace(' ', '+')
+    driver_encoded = driver_name.replace(' ', '+')
+    query = f'driver={driver_encoded}&trusted_connection=no'
+    if _uses_modern_odbc_driver(driver_name):
+        query += '&TrustServerCertificate=yes'
     return (
-        f'mssql+pyodbc://{username}:{encoded_password}@{host}/{database}'
-        f'?driver={driver_encoded}&trusted_connection=no&TrustServerCertificate=yes'
+        f'mssql+pyodbc://{encoded_username}:{encoded_password}@{host}/{database}'
+        f'?{query}'
     )
 
 
@@ -163,7 +195,7 @@ class DatabaseConfig:
         }
 
         env_file = env_file_map.get(env, ".env")
-        load_dotenv(env_file)
+        load_dotenv(env_file, encoding='utf-8-sig')
 
         self.postgres_url = os.getenv("POSTGRES_URL")
         self.environment = os.getenv("ENVIRONMENT", env)

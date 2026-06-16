@@ -1,11 +1,11 @@
 """
 Arricchisce articoli DEPOSITA con giacenze e scorta minima da DEPOSYTA (DBDATA).
 
-Dopo la sync SAP (anagrafica + riga magazzino creata da sync_magazzino_from_sap):
+Nel ciclo SAP Sync, dopo anagrafica e bootstrap magazzino (magazzino_bootstrap):
 - scorta_minima  <- v_objects_locations.MinQuantity * Oggetti.QtaConfezione
-- magazzino.quantita <- UPDATE sulla riga SAP esistente (stessa posizione: ubicazione o NON_SPECIFICATA)
+- magazzino.quantita <- UPDATE sulla riga esistente (stessa posizione: ubicazione o NON_SPECIFICATA)
 
-Non inserisce mai righe in magazzino: aggiorna solo ciò che SAP ha già creato.
+Non inserisce righe in magazzino: aggiorna solo ciò creato da bootstrap_magazzino_from_sap.
 
 Join DEPOSYTA: dbo.Oggetti.Codice3 = codice articolo SAP (sap.anagrafica_articoli.id).
 Si considera solo v_objects_locations.Location = 'Magazzino'.
@@ -165,7 +165,7 @@ def enrich_deposita_stock(pg_session: Session, db_config: DatabaseConfig | None 
             else:
                 stats['skipped'] += 1
                 logger.debug(
-                    'Nessuna riga magazzino SAP per %s (sync_magazzino_from_sap non eseguita?)',
+                    'Nessuna riga magazzino per %s (bootstrap_magazzino_from_sap?)',
                     codice,
                 )
         except Exception as e:

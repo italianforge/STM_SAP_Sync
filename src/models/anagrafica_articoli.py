@@ -23,8 +23,7 @@ class SAP_AnagraficheArticoli(Base):
     cod_business_partner_pref = Column(String)
     priorita = Column(String)
     categoria = Column(String)  # MODULA | DEPOSITA | RICAMBI
-    # Fonte SAP da definire; colonna predisposta per articolo equivalente
-    art_equivalente = Column(String)
+    art_equivalente = Column(String)  # OITM.U_SFT_SUBCAT
     last_synced_at = Column(DateTime)
     
     def __repr__(self):
