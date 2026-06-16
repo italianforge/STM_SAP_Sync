@@ -5,6 +5,8 @@ from .anagrafiche_business_partner import SAP_AnagraficheBusinessPartner
 from .catalogo_business_partner import SAP_CatalogoBusinessPartner
 from .ordini_acquisto import SAP_OrdiniAcquisto
 from .ordini_acquisto_lines import SAP_OrdiniAcquistoLine
+from .entrata_merci import SAP_EntrataMerci
+from .entrata_merci_lines import SAP_EntrataMerciLine
 
 __all__ = ['Base', 
         'SAP_SyncState', 
@@ -12,4 +14,6 @@ __all__ = ['Base',
         'SAP_AnagraficheBusinessPartner', 
         'SAP_CatalogoBusinessPartner',
         'SAP_OrdiniAcquisto', 
-        'SAP_OrdiniAcquistoLine']
+        'SAP_OrdiniAcquistoLine',
+        'SAP_EntrataMerci',
+        'SAP_EntrataMerciLine']

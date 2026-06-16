@@ -127,6 +127,8 @@ il nuovo valore senza riavvio.
 | `catalogoBusinessPartner` | `sap.catalogo_business_partner` | TRUNCATE + INSERT |
 | `ordiniAcquisto` | `sap.ordini_acquisto` | UPSERT |
 | `ordiniAcquistoLines` | `sap.ordini_acquisto_lines` | TRUNCATE + INSERT |
+| `entrataMerci` | `sap.entrata_merci` | TRUNCATE + INSERT |
+| `entrataMerciLines` | `sap.entrata_merci_lines` | TRUNCATE + INSERT |
 
 ## Aggiungere una nuova tabella
 

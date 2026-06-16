@@ -35,6 +35,8 @@ TABLES_TO_SYNC = [
     "catalogoBusinessPartner",
     "ordiniAcquisto",
     "ordiniAcquistoLines",
+    "entrataMerci",
+    "entrataMerciLines",
 ]
 
 DEFAULT_INTERVAL_MINUTES = 60

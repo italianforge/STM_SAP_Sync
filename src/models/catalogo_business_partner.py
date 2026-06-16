@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime
+from sqlalchemy import Column, Float, String
 from .base import Base
 
 class SAP_CatalogoBusinessPartner(Base):
@@ -9,6 +9,7 @@ class SAP_CatalogoBusinessPartner(Base):
     cod_articolo = Column(String, primary_key=True)
     cod_business_partner = Column(String, primary_key=True)
     translation = Column(String, primary_key=True)
+    prezzo = Column(Float)
     
     def __repr__(self):
         return f"<SAP_CatalogoBusinessPartner(cod_articolo='{self.cod_articolo}', cod_business_partner='{self.cod_business_partner}', translation='{self.translation}')>"

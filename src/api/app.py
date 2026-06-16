@@ -215,6 +215,8 @@ def _run_sync_background():
             'catalogoBusinessPartner',
             'ordiniAcquisto',
             'ordiniAcquistoLines',
+            'entrataMerci',
+            'entrataMerciLines',
         ]
         errors = []
         for table in tables:
