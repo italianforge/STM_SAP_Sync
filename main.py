@@ -35,6 +35,10 @@ TABLES_TO_SYNC = [
     "catalogoBusinessPartner",
     "ordiniAcquisto",
     "ordiniAcquistoLines",
+]
+
+# Testata prima delle righe: FK entrata_merci_lines -> entrata_merci (ON DELETE CASCADE)
+ENTRATA_MERCI_TABLES = [
     "entrataMerci",
     "entrataMerciLines",
 ]
@@ -84,6 +88,28 @@ def _cleanup_orphan_order_headers(logger) -> None:
             logger.info(f"Cleanup ordini: rimossi {deleted} ordini senza righe valide")
     except Exception as e:
         logger.warning(f"Cleanup orphan headers fallito (non bloccante): {e}")
+
+
+def _cleanup_orphan_entrata_merci_lines(logger) -> None:
+    """Rimuove righe entrata merci senza testata (non dovrebbero esistere con FK attiva)."""
+    try:
+        from sqlalchemy import create_engine, text
+        db_config = DatabaseConfig()
+        engine = create_engine(db_config.postgres_url)
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                DELETE FROM sap.entrata_merci_lines l
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM sap.entrata_merci e WHERE e.id = l.cod_entrata_merci
+                )
+            """))
+            conn.commit()
+            deleted = result.rowcount
+        engine.dispose()
+        if deleted:
+            logger.info(f"Cleanup entrata merci: rimosse {deleted} righe orfane")
+    except Exception as e:
+        logger.warning(f"Cleanup orphan entrata merci lines fallito (non bloccante): {e}")
 
 
 def sync_single_table(table_name: str, logger, error_logger) -> dict:
@@ -144,10 +170,24 @@ def run_full_sync(logger, error_logger) -> dict:
 
         total_duration = time.time() - start_time
         successful = len([r for r in results if r["success"]])
-        logger.info(f"Riepilogo: {successful}/{len(TABLES_TO_SYNC)} riuscite in {total_duration:.2f}s")
+        logger.info(f"Riepilogo parallelo: {successful}/{len(TABLES_TO_SYNC)} riuscite in {total_duration:.2f}s")
+
+        for table_name in ENTRATA_MERCI_TABLES:
+            result = sync_single_table(table_name, logger, error_logger)
+            results.append(result)
+            if result["success"]:
+                logger.info(f"✓ {result['table']} completata in {result['duration']:.2f}s")
+            else:
+                failed_tables.append(result['table'])
+                logger.error(f"✗ {result['table']} fallita in {result['duration']:.2f}s: {result['error']}")
 
         # Cleanup sequenziale: rimuove testate senza righe (entrambe le sync sono completate)
         _cleanup_orphan_order_headers(logger)
+        _cleanup_orphan_entrata_merci_lines(logger)
+
+        total_tables = len(TABLES_TO_SYNC) + len(ENTRATA_MERCI_TABLES)
+        successful = len([r for r in results if r["success"]])
+        logger.info(f"Riepilogo totale: {successful}/{total_tables} riuscite")
 
         sync_result = {
             'success': len(failed_tables) == 0,

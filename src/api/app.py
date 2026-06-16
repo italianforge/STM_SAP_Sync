@@ -215,11 +215,10 @@ def _run_sync_background():
             'catalogoBusinessPartner',
             'ordiniAcquisto',
             'ordiniAcquistoLines',
-            'entrataMerci',
-            'entrataMerciLines',
         ]
+        entrata_merci_tables = ['entrataMerci', 'entrataMerciLines']
         errors = []
-        for table in tables:
+        for table in tables + entrata_merci_tables:
             try:
                 sync_engine.sync_table(table)
             except Exception as e:

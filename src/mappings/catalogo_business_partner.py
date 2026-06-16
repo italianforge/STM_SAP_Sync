@@ -17,7 +17,7 @@ OUTER APPLY (
     FROM dbo.SPP1
     WHERE ItemCode = o.ItemCode
       AND CardCode = o.CardCode
-    ORDER BY SPP1LNum
+    ORDER BY SPP1.LINENUM
 ) sp
 """.strip()
 

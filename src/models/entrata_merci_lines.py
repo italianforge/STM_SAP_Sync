@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Float, Integer, String
+from sqlalchemy import Column, Float, ForeignKey, Integer, String
 from .base import Base
 
 
@@ -7,7 +7,11 @@ class SAP_EntrataMerciLine(Base):
     __tablename__ = "entrata_merci_lines"
     __table_args__ = {"schema": "sap"}
 
-    cod_entrata_merci = Column(Integer, primary_key=True)
+    cod_entrata_merci = Column(
+        Integer,
+        ForeignKey("sap.entrata_merci.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
     line_num = Column(Integer, primary_key=True)
     cod_articolo = Column(String)
     quantity = Column(Float, default=0.0)

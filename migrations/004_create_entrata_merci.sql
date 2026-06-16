@@ -9,7 +9,7 @@ CREATE TABLE sap.entrata_merci (
 );
 
 CREATE TABLE sap.entrata_merci_lines (
-    cod_entrata_merci INTEGER NOT NULL,
+    cod_entrata_merci INTEGER NOT NULL REFERENCES sap.entrata_merci(id) ON DELETE CASCADE,
     line_num INTEGER NOT NULL,
     cod_articolo VARCHAR(50),
     quantity DOUBLE PRECISION DEFAULT 0,
