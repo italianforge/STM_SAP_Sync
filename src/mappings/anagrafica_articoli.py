@@ -8,6 +8,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 _sap_item_codes: Optional[Set[str]] = None
+_debug_art_eq_stats: Dict[str, Any] = {
+    "raw_nonempty": 0,
+    "sanitized_ok": 0,
+    "sanitized_null": 0,
+    "rejected_samples": [],
+}
 
 
 def _reset_sap_item_codes_cache() -> None:
@@ -26,8 +32,24 @@ def _load_sap_item_codes(sap_session) -> Set[str]:
 
 
 def _pre_sync_articoli(sap_session) -> None:
+    global _debug_art_eq_stats
+    _debug_art_eq_stats = {
+        "raw_nonempty": 0,
+        "sanitized_ok": 0,
+        "sanitized_null": 0,
+        "rejected_samples": [],
+    }
     _reset_sap_item_codes_cache()
-    _load_sap_item_codes(sap_session)
+    codes = _load_sap_item_codes(sap_session)
+    # #region agent log
+    from ..utils.debug_session_log import debug_log
+    debug_log(
+        "anagrafica_articoli.py:_pre_sync_articoli",
+        "ItemCode cache loaded",
+        {"cache_size": len(codes)},
+        hypothesis_id="H2",
+    )
+    # #endregion
 
 
 def _sanitize_art_equivalente(value: Any) -> Optional[str]:
@@ -40,8 +62,26 @@ def _sanitize_art_equivalente(value: Any) -> Optional[str]:
     code = str(value).strip()
     if not code:
         return None
+    # #region agent log
+    _debug_art_eq_stats["raw_nonempty"] += 1
+    # #endregion
     if _sap_item_codes is None or code not in _sap_item_codes:
+        # #region agent log
+        _debug_art_eq_stats["sanitized_null"] += 1
+        samples = _debug_art_eq_stats["rejected_samples"]
+        if len(samples) < 5:
+            samples.append(
+                {
+                    "raw": code,
+                    "cache_loaded": _sap_item_codes is not None,
+                    "in_cache": bool(_sap_item_codes and code in _sap_item_codes),
+                }
+            )
+        # #endregion
         return None
+    # #region agent log
+    _debug_art_eq_stats["sanitized_ok"] += 1
+    # #endregion
     return code
 
 
@@ -77,6 +117,30 @@ def _post_transform_articoli(row: Dict[str, Any]) -> Dict[str, Any]:
 
 def _post_sync_articoli(pg_session, rows):
     """Callback post-sync: associazioni macchina + bootstrap magazzino + stock DEPOSYTA e MODULA."""
+    # #region agent log
+    from ..utils.debug_session_log import debug_log
+    pg_stats = pg_session.execute(
+        text(
+            """
+            SELECT
+                COUNT(*) AS total,
+                COUNT(art_equivalente) FILTER (WHERE art_equivalente IS NOT NULL AND TRIM(art_equivalente) <> '') AS with_art_eq
+            FROM sap.anagrafica_articoli
+            """
+        )
+    ).mappings().first()
+    debug_log(
+        "anagrafica_articoli.py:_post_sync_articoli",
+        "art_equivalente sync stats",
+        {
+            "delta_rows_processed": len(rows),
+            **_debug_art_eq_stats,
+            "pg_total": int(pg_stats["total"] or 0),
+            "pg_with_art_equivalente": int(pg_stats["with_art_eq"] or 0),
+        },
+        hypothesis_id="H2,H4,H5",
+    )
+    # #endregion
     _sync_assoc_articoli_macchina(pg_session, rows)
     from ..config.database import DatabaseConfig
     from ..sync.magazzino_bootstrap import bootstrap_magazzino_from_sap

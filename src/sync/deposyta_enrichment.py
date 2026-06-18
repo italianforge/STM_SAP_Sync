@@ -109,8 +109,7 @@ def enrich_deposita_stock(pg_session: Session, db_config: DatabaseConfig | None 
     except Exception as e:
         logger.error('Lettura stock DEPOSYTA fallita: %s', e)
         stats['errors'] += 1
-        deposyta_session.close()
-        raise
+        return stats
     finally:
         deposyta_session.close()
 

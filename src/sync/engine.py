@@ -61,6 +61,20 @@ class SyncEngine:
             if not rows:
                 table_logger.info("Nessuna riga da sincronizzare")
             else:
+                # #region agent log
+                if table_name == "anagraficheArticoli":
+                    from ..utils.debug_session_log import debug_log
+                    debug_log(
+                        "engine.py:sync_table",
+                        "anagraficheArticoli sync batch",
+                        {
+                            "last_sync": last_sync.isoformat() if last_sync else None,
+                            "is_delta": bool(last_sync and not mapping.requires_truncate()),
+                            "rows_fetched": total_records,
+                        },
+                        hypothesis_id="H5",
+                    )
+                # #endregion
                 # Se richiesto, truncate la tabella prima di inserire i nuovi dati
                 if mapping.requires_truncate():
                     self._truncate_table(pg_session, mapping, table_logger)
@@ -273,6 +287,20 @@ class SyncEngine:
             except Exception as row_e:
                 row_sp.rollback()
                 err += 1
+                # #region agent log
+                if rec.get("art_equivalente"):
+                    from ..utils.debug_session_log import debug_log
+                    debug_log(
+                        "engine.py:_execute_batch_with_fallback",
+                        "row skipped with art_equivalente",
+                        {
+                            "record_id": self._record_label(mapping, rec),
+                            "art_equivalente": rec.get("art_equivalente"),
+                            "error": f"{type(row_e).__name__}: {row_e}",
+                        },
+                        hypothesis_id="H3,H4",
+                    )
+                # #endregion
                 log_database_error(
                     logger,
                     f"Riga skippata ({self._record_label(mapping, rec)})",
