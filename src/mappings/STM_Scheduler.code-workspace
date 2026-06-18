@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../../../STM_Scheduler_FE"
+		},
+		{
+			"path": "../../../STM_Email_Service"
 		}
 	],
 	"settings": {}
