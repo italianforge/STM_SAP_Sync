@@ -41,6 +41,10 @@ def _uses_modern_odbc_driver(driver: str | None) -> bool:
     return 'odbc driver 17' in name or 'odbc driver 18' in name
 
 
+def _is_freetds_driver(driver: str | None) -> bool:
+    return 'freetds' in (driver or _DEFAULT_MSSQL_DRIVER).lower()
+
+
 def _encode_mssql_server(server: str) -> str:
     """Codifica il nome server per URL SQLAlchemy (istanze nominate es. host\\INSTANCE)."""
     return (server or '').replace('\\', '%5C')
@@ -60,14 +64,19 @@ def _build_mssql_url_from_fields(
     encoded_password = quote_plus(password or '')
     encoded_username = quote_plus(username or '')
 
-    # Istanze nominate (host\INSTANCE): odbc_connect evita problemi di parsing URL.
-    if server and '\\' in server:
-        host_part, instance_name = server.split('\\', 1)
-        if port and str(port) not in ('', '1433'):
-            # Porta TCP esplicita: evita SQL Browser (UDP 1434).
-            server_arg = f'{host_part},{port}'
+    is_named = server and '\\' in server
+    use_odbc_connect = is_named or _is_freetds_driver(driver_name)
+
+    if use_odbc_connect:
+        if is_named:
+            host_part = server.split('\\', 1)[0]
+            if port and str(port) not in ('', '1433'):
+                server_arg = f'{host_part},{port}'
+            else:
+                server_arg = server
         else:
             server_arg = server
+
         odbc_parts = [
             f'DRIVER={{{driver_name}}}',
             f'SERVER={server_arg}',
@@ -75,7 +84,12 @@ def _build_mssql_url_from_fields(
             f'UID={username}',
             f'PWD={password or ""}',
         ]
-        if _uses_modern_odbc_driver(driver_name):
+        if _is_freetds_driver(driver_name):
+            if not is_named:
+                # Porta esplicita per host regolare; named instance usa SQL Browser.
+                odbc_parts.append(f'PORT={port or "1433"}')
+            odbc_parts.append('TDS_Version=7.1')
+        elif _uses_modern_odbc_driver(driver_name):
             odbc_parts.append('TrustServerCertificate=yes')
         odbc_connect = ';'.join(odbc_parts)
         return f'mssql+pyodbc:///?odbc_connect={quote_plus(odbc_connect)}'

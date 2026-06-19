@@ -108,14 +108,14 @@ def _cleanup_orphan_entrata_merci_lines(logger) -> None:
         logger.warning(f"Cleanup orphan entrata merci lines fallito (non bloccante): {e}")
 
 
-def sync_single_table(table_name: str, logger, error_logger) -> dict:
+def sync_single_table(table_name: str, logger, error_logger, force_full: bool = False) -> dict:
     """Sincronizza una singola tabella — funzione per threading."""
     table_start = time.time()
     logger.info(f"Avvio sincronizzazione tabella: {table_name}")
     try:
         db_config = DatabaseConfig()
         sync_engine = SyncEngine(db_config)
-        sync_engine.sync_table(table_name)
+        sync_engine.sync_table(table_name, force_full=force_full)
         table_duration = time.time() - table_start
         log_performance(logger, f"Sincronizzazione {table_name}", table_duration)
         logger.info(f"Completata sincronizzazione tabella: {table_name}")
@@ -127,11 +127,12 @@ def sync_single_table(table_name: str, logger, error_logger) -> dict:
         return {"table": table_name, "success": False, "duration": table_duration, "error": str(e)}
 
 
-def run_full_sync(logger, error_logger) -> dict:
+def run_full_sync(logger, error_logger, force_full: bool = False) -> dict:
     """
     Esegue la sincronizzazione completa in parallelo.
     Aggiorna _sync_status durante l'esecuzione.
     Restituisce il dict di risultato.
+    Se force_full=True, ignora il last_sync per le tabelle UPSERT (full resync).
     """
     import src.api.app as api_module
 
@@ -152,7 +153,7 @@ def run_full_sync(logger, error_logger) -> dict:
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_table = {
-                executor.submit(sync_single_table, t, logger, error_logger): t
+                executor.submit(sync_single_table, t, logger, error_logger, force_full): t
                 for t in TABLES_TO_SYNC
             }
             for future in as_completed(future_to_table):
@@ -169,7 +170,7 @@ def run_full_sync(logger, error_logger) -> dict:
         logger.info(f"Riepilogo parallelo: {successful}/{len(TABLES_TO_SYNC)} riuscite in {total_duration:.2f}s")
 
         for table_name in ENTRATA_MERCI_TABLES:
-            result = sync_single_table(table_name, logger, error_logger)
+            result = sync_single_table(table_name, logger, error_logger, force_full)
             results.append(result)
             if result["success"]:
                 logger.info(f"✓ {result['table']} completata in {result['duration']:.2f}s")
@@ -322,17 +323,19 @@ def scheduler_loop(logger, error_logger):
 
     logger.info("Scheduler loop avviato")
 
+    first_run = True
     while not _shutdown_event.is_set():
         # Leggi (o rileggi) l'intervallo configurato
         interval_minutes = _get_sync_interval(logger)
         interval_seconds = interval_minutes * 60
         logger.info(f"Intervallo sincronizzazione: {interval_minutes} minuti")
 
-        # Esegui sincronizzazione
+        # Esegui sincronizzazione (full resync al primo avvio, delta dai cicli successivi)
         logger.info("=" * 50)
-        logger.info("Avvio ciclo di sincronizzazione")
+        logger.info("Avvio ciclo di sincronizzazione" + (" (full resync — primo avvio)" if first_run else ""))
         logger.info("=" * 50)
-        run_full_sync(logger, error_logger)
+        run_full_sync(logger, error_logger, force_full=first_run)
+        first_run = False
 
         # Riconcilia RFQ aperte con ordini di acquisto appena sincronizzati
         try:

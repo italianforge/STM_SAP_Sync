@@ -18,7 +18,7 @@ class SyncEngine:
         self.sync_state_service = SyncStateService()
         self.batch_size = Settings.get_batch_size()
     
-    def sync_table(self, table_name: str) -> None:
+    def sync_table(self, table_name: str, force_full: bool = False) -> None:
         """Sincronizza una tabella specifica usando il mapping"""
         table_logger = setup_sync_logger(table_name)
         start_time = time.time()
@@ -41,6 +41,9 @@ class SyncEngine:
             if mapping.requires_truncate():
                 last_sync = None
                 table_logger.info("Modalità TRUNCATE_INSERT: recupero tutti i dati")
+            elif force_full:
+                last_sync = None
+                table_logger.info("Modalità UPSERT: full resync forzato (primo avvio)")
             else:
                 # Ottieni ultimo sync per modalità UPSERT
                 last_sync = self.sync_state_service.get_last_sync(pg_session, table_name)
