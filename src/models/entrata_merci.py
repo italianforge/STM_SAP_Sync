@@ -10,6 +10,7 @@ class SAP_EntrataMerci(Base):
     id = Column(Integer, primary_key=True)
     date_registration = Column(DateTime)
     cod_business_partner = Column(String)
+    status = Column(String(10), default=None)
 
     def __repr__(self):
         return (

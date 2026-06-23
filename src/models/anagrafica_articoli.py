@@ -23,6 +23,7 @@ class SAP_AnagraficheArticoli(Base):
     cod_business_partner_pref = Column(String)
     priorita = Column(String)
     categoria = Column(String)  # MODULA | DEPOSITA | RICAMBI
+    qta_x_conf = Column(Float, default=1.0)
     art_equivalente = Column(String)  # OITM.U_SFT_SUBCAT
     last_synced_at = Column(DateTime)
     

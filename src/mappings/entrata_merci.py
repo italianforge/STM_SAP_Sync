@@ -7,10 +7,18 @@ _ENTRATA_MERCI_QUERY = """
 SELECT
     DocEntry,
     DocDate,
-    CardCode
+    CardCode,
+    DocStatus
 FROM dbo.OPDN
 WHERE DocDate >= DATEADD(year, -1, GETDATE())
 """.strip()
+
+
+def _map_doc_status(value):
+    """Mappa DocStatus SAP (C/O) in status (CLOSED/OPEN)."""
+    if value == 'C':
+        return 'CLOSED'
+    return 'OPEN'
 
 
 MAPPING_ENTRATA_MERCI = TableMapping(
@@ -20,11 +28,13 @@ MAPPING_ENTRATA_MERCI = TableMapping(
         "DocEntry": "id",
         "DocDate": "date_registration",
         "CardCode": "cod_business_partner",
+        "DocStatus": "status",
     },
     transformations={
         "id": safe_int,
         "date_registration": safe_datetime,
         "cod_business_partner": safe_string,
+        "status": _map_doc_status,
     },
     primary_key_sap=["DocEntry"],
     sync_strategy=SyncStrategy.TRUNCATE_INSERT,

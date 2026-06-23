@@ -15,6 +15,12 @@ class SAP_EntrataMerciLine(Base):
     line_num = Column(Integer, primary_key=True)
     cod_articolo = Column(String)
     quantity = Column(Float, default=0.0)
+    cod_order_acquisto = Column(
+        Integer,
+        ForeignKey("sap.ordini_acquisto.id"),
+        nullable=True,
+    )
+    status = Column(String(10), default=None)
 
     def __repr__(self):
         return (

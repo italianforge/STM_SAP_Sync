@@ -112,6 +112,11 @@ def _post_transform_articoli(row: Dict[str, Any]) -> Dict[str, Any]:
         row["categoria"] = None
 
     row["art_equivalente"] = _sanitize_art_equivalente(row.get("art_equivalente"))
+
+    categoria = row.get("categoria")
+    if categoria in ("RICAMBI", "MODULA"):
+        row["qta_x_conf"] = 1.0
+
     return row
 
 

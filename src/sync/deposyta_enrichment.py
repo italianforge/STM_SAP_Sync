@@ -3,6 +3,7 @@ Arricchisce articoli DEPOSITA con giacenze e scorta minima da DEPOSYTA (DBDATA).
 
 Nel ciclo SAP Sync, dopo anagrafica e bootstrap magazzino (magazzino_bootstrap):
 - scorta_minima  <- v_objects_locations.MinQuantity * Oggetti.QtaConfezione
+- qta_x_conf     <- Oggetti.QtaConfezione (default 1 se assente o <= 0)
 - magazzino.quantita <- UPDATE sulla riga esistente (stessa posizione: ubicazione o NON_SPECIFICATA)
 
 Non inserisce righe in magazzino: aggiorna solo ciò creato da bootstrap_magazzino_from_sap.
@@ -39,15 +40,20 @@ WHERE LTRIM(RTRIM(vol.Code3)) <> ''
   AND LTRIM(RTRIM(vol.Location)) = 'Magazzino'
 """.strip()
 
+def normalizza_qta_confezione(qta_confezione: Any) -> float:
+    """Restituisce QtaConfezione DEPOSYTA; default 1 se assente o non valida."""
+    conf = safe_float(qta_confezione)
+    if conf is None or conf <= 0:
+        return 1.0
+    return conf
+
+
 def pezzi_da_confezioni(quantity_confezioni: Any, qta_confezione: Any) -> float | None:
     """Converte quantità in confezioni in pezzi usando QtaConfezione."""
     qty = safe_float(quantity_confezioni)
     if qty is None:
         return None
-    conf = safe_float(qta_confezione)
-    if conf is None or conf <= 0:
-        conf = 1.0
-    return qty * conf
+    return qty * normalizza_qta_confezione(qta_confezione)
 
 
 def enrich_deposita_stock(pg_session: Session, db_config: DatabaseConfig | None = None) -> dict:
@@ -120,6 +126,7 @@ def enrich_deposita_stock(pg_session: Session, db_config: DatabaseConfig | None 
             stats['skipped'] += 1
             continue
 
+        qta_x_conf = normalizza_qta_confezione(row_map.get('qta_confezione'))
         scorta_pezzi = pezzi_da_confezioni(
             row_map.get('min_quantity_confezioni'),
             row_map.get('qta_confezione'),
@@ -128,6 +135,23 @@ def enrich_deposita_stock(pg_session: Session, db_config: DatabaseConfig | None 
             row_map.get('quantity_confezioni'),
             row_map.get('qta_confezione'),
         )
+
+        try:
+            pg_session.execute(
+                text(
+                    """
+                    UPDATE sap.anagrafica_articoli
+                    SET qta_x_conf = :qta_x_conf
+                    WHERE id = :id AND categoria = 'DEPOSITA'
+                    """
+                ),
+                {'id': codice, 'qta_x_conf': qta_x_conf},
+            )
+            stats['updated_anagrafica'] += 1
+        except Exception as e:
+            logger.error('Aggiornamento qta_x_conf %s fallito: %s', codice, e)
+            stats['errors'] += 1
+
         if quantita_pezzi is None:
             stats['skipped'] += 1
             continue
@@ -183,7 +207,6 @@ def enrich_deposita_stock(pg_session: Session, db_config: DatabaseConfig | None 
                     ),
                     {'id': codice, 'scorta_minima': scorta_pezzi},
                 )
-                stats['updated_anagrafica'] += 1
             except Exception as e:
                 logger.error('Aggiornamento scorta_minima %s fallito: %s', codice, e)
                 stats['errors'] += 1
