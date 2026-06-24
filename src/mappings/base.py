@@ -18,7 +18,8 @@ class TableMapping:
                  sap_timestamp_prefix: Optional[str] = None,
                  post_transform: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
                  post_sync_callback: Optional[Callable] = None,
-                 pre_sync_callback: Optional[Callable] = None):
+                 pre_sync_callback: Optional[Callable] = None,
+                 pre_process_callback: Optional[Callable] = None):
         self.sap_table = sap_table
         self.pg_model = pg_model
         self.column_mappings = column_mappings  # sap_column -> pg_column
@@ -34,6 +35,8 @@ class TableMapping:
         self.post_sync_callback = post_sync_callback
         # Callback opzionale eseguita prima del processing righe: riceve sap_session.
         self.pre_sync_callback = pre_sync_callback
+        # Callback opzionale dopo truncate e prima del processing: riceve pg_session.
+        self.pre_process_callback = pre_process_callback
         # Normalizza primary_key_sap come lista
         if isinstance(primary_key_sap, str):
             self.primary_key_sap = [primary_key_sap]

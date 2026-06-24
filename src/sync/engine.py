@@ -85,6 +85,9 @@ class SyncEngine:
                 if mapping.pre_sync_callback:
                     mapping.pre_sync_callback(sap_session)
 
+                if mapping.pre_process_callback:
+                    mapping.pre_process_callback(pg_session)
+
                 # Processa i dati
                 processed_records, error_count, max_ts = self._process_rows(
                     rows, mapping, pg_session, table_logger

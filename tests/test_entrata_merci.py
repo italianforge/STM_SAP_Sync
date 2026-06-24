@@ -4,7 +4,9 @@ from src.mappings.entrata_merci import MAPPING_ENTRATA_MERCI, _ENTRATA_MERCI_QUE
 from src.mappings.entrata_merci_lines import (
     MAPPING_ENTRATA_MERCI_LINES,
     _ENTRATA_MERCI_LINES_QUERY,
+    _align_order_reference,
 )
+import src.mappings.entrata_merci_lines as entrata_merci_lines_module
 
 
 class EntrataMerciMappingTestCase(unittest.TestCase):
@@ -47,6 +49,7 @@ class EntrataMerciLinesMappingTestCase(unittest.TestCase):
         self.assertIn("ITEMCODE", query)
         self.assertIn("QUANTITY", query)
         self.assertIn("BASEENTRY", query)
+        self.assertIn("BASELINE", query)
         self.assertIn("LINESTATUS", query)
 
     def test_lines_mapping_transforms_row(self):
@@ -56,6 +59,7 @@ class EntrataMerciLinesMappingTestCase(unittest.TestCase):
             "ItemCode": "ART001",
             "Quantity": 3.5,
             "BaseEntry": 501,
+            "BaseLine": 2,
             "LineStatus": "C",
         })
         self.assertEqual(row["cod_entrata_merci"], 1001)
@@ -63,7 +67,31 @@ class EntrataMerciLinesMappingTestCase(unittest.TestCase):
         self.assertEqual(row["cod_articolo"], "ART001")
         self.assertEqual(row["quantity"], 3.5)
         self.assertEqual(row["cod_order_acquisto"], 501)
+        self.assertEqual(row["order_line"], 2)
         self.assertEqual(row["status"], "CLOSED")
+
+    def test_lines_mapping_clears_order_ref_when_order_not_synced(self):
+        entrata_merci_lines_module._valid_order_ids = {501}
+        row = _align_order_reference({
+            "cod_entrata_merci": 1001,
+            "line_num": 0,
+            "cod_articolo": "ART001",
+            "quantity": 3.5,
+            "cod_order_acquisto": 999,
+            "order_line": 2,
+            "status": "CLOSED",
+        })
+        self.assertIsNone(row["cod_order_acquisto"])
+        self.assertIsNone(row["order_line"])
+
+    def test_lines_mapping_keeps_order_ref_when_order_synced(self):
+        entrata_merci_lines_module._valid_order_ids = {501}
+        row = _align_order_reference({
+            "cod_order_acquisto": 501,
+            "order_line": 2,
+        })
+        self.assertEqual(row["cod_order_acquisto"], 501)
+        self.assertEqual(row["order_line"], 2)
 
     def test_lines_mapping_null_order_when_base_entry_zero(self):
         row = MAPPING_ENTRATA_MERCI_LINES.transform_row({
@@ -72,9 +100,11 @@ class EntrataMerciLinesMappingTestCase(unittest.TestCase):
             "ItemCode": "ART002",
             "Quantity": 1,
             "BaseEntry": 0,
+            "BaseLine": 0,
             "LineStatus": "O",
         })
         self.assertIsNone(row["cod_order_acquisto"])
+        self.assertEqual(row["order_line"], 0)
         self.assertEqual(row["status"], "OPEN")
 
 

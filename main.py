@@ -72,9 +72,14 @@ def _cleanup_orphan_order_headers(logger) -> None:
         engine = create_engine(db_config.postgres_url)
         with engine.connect() as conn:
             result = conn.execute(text("""
-                DELETE FROM sap.ordini_acquisto
-                WHERE id NOT IN (
-                    SELECT DISTINCT cod_documento FROM sap.ordini_acquisto_lines
+                DELETE FROM sap.ordini_acquisto o
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM sap.ordini_acquisto_lines l
+                    WHERE l.cod_documento = o.id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM sap.entrata_merci_lines em
+                    WHERE em.cod_order_acquisto = o.id
                 )
             """))
             conn.commit()

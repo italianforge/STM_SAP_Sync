@@ -20,6 +20,7 @@ class SAP_EntrataMerciLine(Base):
         ForeignKey("sap.ordini_acquisto.id"),
         nullable=True,
     )
+    order_line = Column(Integer, nullable=True)
     status = Column(String(10), default=None)
 
     def __repr__(self):
