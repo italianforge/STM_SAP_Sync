@@ -204,7 +204,7 @@ SELECT
     o.U_Dev_ArtBase,
     o.MinLevel,
     o.ReorderQty,
-    o.CardCode,
+    o.U_SFT_FAMILY_LEV2,
     o.QryGroup14,
     o.QryGroup15,
     o.QryGroup16,
@@ -226,14 +226,12 @@ MAPPING_ANAGRAFICHE_ARTICOLI = TableMapping(
         "U_FamigliaLEV3": "stato",
         "U_SFT_FAMILY_LEV1": "costruttore",
         "U_SFT_SUBCAT": "art_equivalente",
-        # U_SFT_FAMILY_LEV2 -> fornitore: disabilitato, usare cod_business_partner_pref (CardCode)
-        # "U_SFT_FAMILY_LEV2": "fornitore",
+        "U_SFT_FAMILY_LEV2": "cod_business_partner_pref",
         "U_SFT_FAMILY_LEV3": "tipo_articolo",
         "U_SFT_PURCH_SPEC": "auto_ingranaggi",
         "U_Dev_ArtBase": "note_acquisti",  
         "MinLevel": "scorta_minima",
         "ReorderQty": "qty_riordino",
-        "CardCode": "cod_business_partner_pref",   # OITM
         "QryGroup14": "_qry_group14",  # Campo temporaneo per derivare categoria
         "QryGroup15": "_qry_group15",  # Campo temporaneo per derivare categoria
         "QryGroup16": "_qry_group16",  # Campo temporaneo per derivare categoria

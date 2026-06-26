@@ -13,8 +13,7 @@ class SAP_AnagraficheArticoli(Base):
     ubicazione = Column(String)
     stato = Column(String)
     costruttore = Column(String)
-    # fornitore rimosso: U_SFT_FAMILY_LEV2 non più sincronizzato (vedi cod_business_partner_pref)
-    # fornitore = Column(String)
+    # cod_business_partner_pref: OITM.U_SFT_FAMILY_LEV2
     tipo_articolo = Column(String)
     auto_ingranaggi = Column(String)
     note_acquisti = Column(String)
